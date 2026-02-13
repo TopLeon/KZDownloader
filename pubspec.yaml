@@ -1,0 +1,81 @@
+name: kzdownloader
+description: "A beautiful cross-platform GUI application for file, video and music downloading."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- DATABASE ---
+  isar_community:
+    version: 3.3.0
+  isar_community_flutter_libs:
+    version: 3.3.0
+
+  # --- STATE MANAGEMENT ---
+  flutter_riverpod: ^3.0.0
+  riverpod_annotation: ^3.0.0
+  
+  shared_preferences: any
+  file_picker: any
+  open_file: any
+
+  # --- UI & SYSTEM ---
+  window_manager: ^0.4.3
+  google_fonts: ^6.2.1
+  path_provider: ^2.1.2
+  dio: ^5.7.0
+  archive: ^4.0.2
+  uuid: ^4.5.1
+  intl: ^0.20.2
+  flutter_secure_storage: ^10.0.0
+  flutter_localizations:
+    sdk: flutter
+
+  # --- ICONS & MEDIA ---
+  cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  youtube_explode_dart: ^3.0.5
+  flutter_markdown: ^0.7.7+1
+  ultimate_flutter_icons: ^1.4.0
+  path: any
+  not_static_icons: ^0.31.0
+  animated_custom_dropdown: ^3.1.1
+  
+  # --- PLAYBACK ---
+  just_audio: ^0.9.36
+
+  # --- RUST BRIDGE ---
+  rust_lib_kzdownloader:
+    path: rust_builder
+  flutter_rust_bridge: 2.11.1
+
+  # --- AI ---
+  langchain: ^0.8.0
+  langchain_ollama: ^0.4.1
+  langchain_openai: ^0.8.1+1
+  langchain_google: ^0.7.1+2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  isar_community_generator:
+    version: 3.3.0
+  build_runner: any
+  riverpod_generator: ^3.0.0
+
+  flutter_lints: ^3.0.0
+  integration_test:
+    sdk: flutter
+
+flutter:
+  generate: true
+  uses-material-design: true
+  assets:
+    - assets/
