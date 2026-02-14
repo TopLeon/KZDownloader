@@ -49,6 +49,7 @@ dependencies:
   
   # --- PLAYBACK ---
   just_audio: ^0.9.36
+  audio_video_progress_bar: ^2.0.3
 
   # --- RUST BRIDGE ---
   rust_lib_kzdownloader:
