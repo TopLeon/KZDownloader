@@ -1,0 +1,174 @@
+<div align="center">
+
+# KZDownloader
+
+**A beautiful, cross-platform desktop download manager with AI-powered video analysis.**
+
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart)](https://dart.dev)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)]()
+
+
+[English](https://github.com/TopLeon/Seal/KZDownloader/main/README.md) &nbsp;•&nbsp; [Italiano](#italian)
+
+</div>
+
+---
+
+<a id="italian"></a>
+
+## Panoramica
+
+KZDownloader è un'applicazione desktop cross-platform realizzata con Flutter per scaricare video, musica e file generici da centinaia di siti web. Integra un assistente AI in grado di riassumere contenuti video di YouTube e rispondere a domande su di essi.
+
+L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **File generici** — ognuna con la propria vista e i propri controlli. Il design è moderno, minimale e completamente reattivo, con bordi animati a gradiente neon/arcobaleno sulle card di download e sugli elementi interattivi, transizioni fluide e feedback in tempo reale.
+
+## ✨ Funzionalità
+
+### 🎬 Download di Video e Audio
+- Scarica video e audio da **YouTube** e centinaia di altre piattaforme grazie a [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+- Scegli **formato video** (MP4, MKV) e **qualità** prima del download, con due modalità di selezione:
+  - **Semplice**: Migliore · Alta · Media · Bassa
+  - **Esperto**: Best · 2160p (4K) · 1440p · 1080p · 720p · 480p
+- Scarica interi **playlist di YouTube** con concorrenza configurabile — ogni video è tracciato individualmente.
+- Estrazione solo audio in **MP3, M4A, OGG (Vorbis)**.
+
+### 📁 Downloader Generico (stile IDM)
+- Download a **chunk multipli**, in stile IDM, per qualsiasi link HTTP/HTTPS diretto.
+- **Ripresa automatica** — i download interrotti riprendono da dove si erano fermati se il server supporta le range request.
+- Visualizzazione del progresso per ogni chunk con contatore dei worker attivi e barre di avanzamento per segmento.
+- Backend HTTP basato su Rust ([rhttp_plus](https://pub.dev/packages/rhttp_plus)) per la massima velocità e per il **TLS fingerprinting**, che consente di aggirare i sistemi anti-bot su server protetti.
+
+### 🤖 AI — Riassunti e Chat sui Video
+- Recupera automaticamente la **trascrizione / descrizione** di un video YouTube e genera un riassunto strutturato tramite LLM.
+- Poni **domande di follow-up** in una sessione di chat persistente legata al video — la cronologia Q&A è salvata localmente.
+- Supporto per più provider AI:
+  - **Ollama** (locale al 100%, nessun dato lascia il dispositivo)
+  - **OpenAI** (GPT-3.5-turbo, GPT-4, GPT-4o, …)
+  - **Google Gemini** (Gemini 2.5 Pro, Flash, …)
+- Output in streaming con rendering Markdown animato.
+- Dimensione del contesto configurabile (numero massimo di caratteri inviati all'LLM).
+
+### 🎵 Libreria Musicale e Player
+- Scheda **Musica** dedicata con la lista di tutti i file audio scaricati.
+- **Player audio** integrato con barra di avanzamento, play/pausa, avanti/indietro e seek.
+- **Gestione playlist**: crea playlist con nome personalizzato e aggiungi le tracce.
+
+### 🔒 Sicurezza e Integrità
+- **Verifica checksum** (MD5, SHA-1, SHA-256, SHA-512) prima di avviare il download, per garantire l'integrità del file.
+- Le chiavi API sono memorizzate nel **secure storage** del sistema operativo (keychain / credential manager).
+
+### ⚙️ Impostazioni e Personalizzazione
+- Selezione della **cartella di download** con onboarding al primo avvio.
+- Preset predefiniti di **formato**, **qualità** e **formato audio**.
+- Tema **Scuro / Chiaro / Sistema** con transizioni fluide.
+- **Lingua dell'interfaccia**: Inglese 🇬🇧 e Italiano 🇮🇹.
+- Configurazione dei **download simultanei** per playlist e globali.
+- Selezione del modello e del provider AI con gestione delle chiavi API.
+
+### 🖥️ Esperienza Desktop
+- Interfaccia divisa in sezioni dedicate: **Video**, **Musica** e **File generici** — ognuna con layout, ordinamento e ricerca propri.
+- Design moderno, minimale e completamente reattivo con aggiornamenti di progresso in tempo reale.
+- **Bordi neon animati** (`RainbowAnimatedBorder`) attorno alle card di download e agli elementi interattivi, renderizzati tramite un `CustomPainter` dedicato.
+- Effetti glow glassmorphism sulla schermata iniziale e transizioni fluide nell'intera UI.
+- Layout responsive con adattamenti separati per Windows/Linux e macOS.
+
+## 🏗️ Architettura e Stack Tecnologico
+
+| Livello | Tecnologia |
+|---|---|
+| UI Framework | Flutter 3.x + Material 3 |
+| State Management | flutter_riverpod + riverpod_annotation (code generation) |
+| Database Locale | isar_community |
+| AI / LLM | langchain, langchain_ollama, langchain_openai, langchain_google |
+| Client HTTP | rhttp_plus (FFI basato su Rust, TLS fingerprinting) |
+| Metadati Video | youtube_explode_dart + yt-dlp come fallback |
+| Riproduzione Audio | just_audio + media_kit (Windows) |
+| Secure Storage | flutter_secure_storage |
+| Font e Icone | Google Fonts, ultimate_flutter_icons, not_static_icons |
+| Localizzazione | Flutter Gen-l10n (file ARB) |
+
+## 📦 Binari Esterni (scaricati automaticamente al primo avvio)
+
+KZDownloader scarica e gestisce automaticamente i seguenti strumenti esterni nella directory di supporto dell'applicazione — nessuna installazione manuale richiesta:
+
+| Binario | Scopo |
+|---|---|
+| **yt-dlp** | Download di video/audio ed estrazione metadati |
+| **ffmpeg** | Post-processing, remuxing ed estrazione audio |
+| **deno** | Supporto scripting per operazioni avanzate |
+
+## ⬇️ Download
+
+I binari precompilati per Windows, macOS e Linux sono disponibili direttamente nella sezione [**Releases**](../../releases) — nessun ambiente di build necessario.
+
+## 🚀 Avvio Rapido
+
+### Prerequisiti
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) ≥ 3.2.0
+- Dart SDK ≥ 3.2.0
+- Target desktop configurato (`flutter config --enable-windows-desktop` / `--enable-macos-desktop` / `--enable-linux-desktop`)
+
+### Installazione
+
+```bash
+# Clona il repository
+git clone https://github.com/your-username/KZDownloader.git
+cd KZDownloader
+
+# Installa le dipendenze Flutter
+flutter pub get
+
+# Esegui la code generation (Isar + Riverpod)
+dart run build_runner build --delete-conflicting-outputs
+
+# Avvia sulla tua piattaforma
+flutter run -d windows   # oppure macos / linux
+```
+
+### Primo Avvio
+
+Al primo avvio KZDownloader:
+1. Chiederà di selezionare una **cartella di download predefinita**.
+2. Scaricherà automaticamente **yt-dlp** e **ffmpeg** in background.
+
+Per le funzionalità AI, apri le **Impostazioni** e scegli un provider:
+- **Ollama**: installa [Ollama](https://ollama.com) in locale e scarica un modello (es. `ollama pull llama3`).
+- **OpenAI / Google**: inserisci la tua chiave API nel pannello Impostazioni — verrà salvata nel keychain del sistema operativo.
+
+## 📋 Piattaforme Supportate
+
+| Piattaforma | Stato |
+|---|---|
+| Windows | ✅ Pieno supporto |
+| macOS | ✅ Pieno supporto (layout adattato) |
+| Linux | ✅ Pieno supporto |
+| Android / iOS | ⚠️ Sperimentale (non target primario) |
+
+## 🗂️ Struttura del Progetto
+
+```
+lib/
+├── main.dart                  # Entry point, schermata di avvio
+├── core/
+│   ├── download/
+│   │   ├── logic/             # ChunkDownloader, IDMDownloader, YtDlpService
+│   │   ├── providers/         # Provider Riverpod per i download
+│   │   └── strategies/        # Strategie di download (IDM, yt-dlp, playlist, standard)
+│   ├── providers/             # Provider tema, lingua, qualità
+│   ├── services/              # DB, LLM, audio player, impostazioni, secure storage
+│   ├── theme/                 # Temi Material 3 (chiaro/scuro)
+│   └── utils/                 # BinaryManager, ChecksumVerifier, FileUtils
+├── models/                    # Modelli Isar (DownloadTask, Playlist)
+├── views/
+│   ├── chat/                  # UI principale: home, lista contenuti, musica, chat
+│   ├── settings/              # Schermata impostazioni
+│   └── widgets/               # Dialog e widget condivisi
+└── l10n/arb/                  # Localizzazione (EN / IT)
+```
+
+## 🤝 Contribuire
+
+Contributi, segnalazioni di bug e richieste di funzionalità sono benvenuti. Apri una issue o invia una pull request.
