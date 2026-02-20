@@ -37,7 +37,7 @@ The interface is organized into dedicated sections — **Videos**, **Music**, an
 - Download entire **YouTube playlists** with configurable concurrency — each video is tracked individually.
 - Audio-only extraction to **MP3, M4A, OGG (Vorbis)**.
 
-### 📁 Generic File Downloader (IDM-like)
+### 📁 Generic File Downloader
 - Multi-threaded, **IDM-style chunked download** for any direct HTTP/HTTPS link.
 - Automatic **resume support** — interrupted downloads pick up where they left off if the server supports range requests.
 - Per-chunk progress visualization with active worker count and individual segment progress bars.

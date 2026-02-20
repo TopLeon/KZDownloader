@@ -1,7 +1,7 @@
 <div align="center">
 &nbsp;
 <p align="center">
-  <img src="assets/logo.png" width="50%"/>
+  <img src="../assets/logo.png" width="50%"/>
   <br>
 </p>
 
@@ -37,7 +37,7 @@ L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **F
 - Scarica interi **playlist di YouTube** con concorrenza configurabile — ogni video è tracciato individualmente.
 - Estrazione solo audio in **MP3, M4A, OGG (Vorbis)**.
 
-### 📁 Downloader Generico (stile IDM)
+### 📁 Downloader Generico
 - Download a **chunk multipli**, in stile IDM, per qualsiasi link HTTP/HTTPS diretto.
 - **Ripresa automatica** — i download interrotti riprendono da dove si erano fermati se il server supporta le range request.
 - Visualizzazione del progresso per ogni chunk con contatore dei worker attivi e barre di avanzamento per segmento.
