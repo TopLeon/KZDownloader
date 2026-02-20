@@ -49,7 +49,7 @@ class LlmService {
   String? _selectedModelName;
   LlmProvider _activeProvider = LlmProvider.ollama;
   String? _apiKey;
-  
+
   // Request queue to handle concurrent requests sequentially.
   final Queue<_QueuedRequest> _requestQueue = Queue<_QueuedRequest>();
   bool _isProcessing = false;
@@ -144,8 +144,14 @@ class LlmService {
         return models;
       } catch (e) {
         return [
-          OllamaModelInfo(name: 'models/gemini-2.5-pro', size: '-', details: 'Gemini 2.5 Pro'),
-          OllamaModelInfo(name: 'models/gemini-2.5-flash', size: '-', details: 'Gemini 2.5 Flash'),
+          OllamaModelInfo(
+              name: 'models/gemini-2.5-pro',
+              size: '-',
+              details: 'Gemini 2.5 Pro'),
+          OllamaModelInfo(
+              name: 'models/gemini-2.5-flash',
+              size: '-',
+              details: 'Gemini 2.5 Flash'),
         ];
       }
     }
@@ -246,7 +252,7 @@ class LlmService {
   Future<Stream<String>> streamChat(List<LlmMsg> messages,
       {int maxTokens = 2048}) async {
     final completer = Completer<Stream<String>>();
-    
+
     // Add request to queue.
     _requestQueue.add(_QueuedRequest(
       messages: messages,
@@ -263,27 +269,27 @@ class LlmService {
   // Processes the request queue sequentially.
   Future<void> _processQueue() async {
     if (_isProcessing || _requestQueue.isEmpty) return;
-    
+
     _isProcessing = true;
 
     while (_requestQueue.isNotEmpty) {
       final request = _requestQueue.removeFirst();
-      
+      final streamDone = Completer<void>();
+
       try {
-        final stream = await _executeStreamChat(request.messages, request.maxTokens);
+        final stream = await _executeStreamChat(
+            request.messages, request.maxTokens, streamDone);
         request.completer.complete(stream);
       } catch (e) {
         request.completer.completeError(e);
+        if (!streamDone.isCompleted) streamDone.complete();
       }
 
       // Wait for the current stream to complete before processing next request.
-      if (request.completer.isCompleted) {
-        try {
-          final stream = await request.completer.future;
-          await stream.last.catchError((_) => ''); // Wait for stream completion
-        } catch (_) {
-          // Stream error already handled in completer
-        }
+      try {
+        await streamDone.future;
+      } catch (_) {
+        // Ignore errors
       }
     }
 
@@ -291,8 +297,15 @@ class LlmService {
   }
 
   // Internal method that executes a single chat request.
-  Future<Stream<String>> _executeStreamChat(List<LlmMsg> messages, int maxTokens) async {
-    final controller = StreamController<String>();
+  Future<Stream<String>> _executeStreamChat(List<LlmMsg> messages,
+      int maxTokens, Completer<void> doneCompleter) async {
+    late StreamController<String> controller;
+
+    controller = StreamController<String>(
+      onCancel: () {
+        if (!doneCompleter.isCompleted) doneCompleter.complete();
+      },
+    );
 
     try {
       final chatModel = _getChatModel();
@@ -335,10 +348,12 @@ ${m.content}
           controller.add(chunk);
         },
         onDone: () {
-          controller.close();
+          if (!controller.isClosed) controller.close();
+          if (!doneCompleter.isCompleted) doneCompleter.complete();
         },
         onError: (e) {
           if (!controller.isClosed) controller.addError(e);
+          if (!doneCompleter.isCompleted) doneCompleter.complete();
         },
       );
     } catch (e) {
@@ -346,6 +361,7 @@ ${m.content}
         controller.addError(e);
         controller.close();
       }
+      if (!doneCompleter.isCompleted) doneCompleter.complete();
     }
 
     return controller.stream;

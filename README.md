@@ -1,6 +1,9 @@
 <div align="center">
-
-# KZDownloader
+&nbsp;
+<p align="center">
+  <img src="assets/logo.png" width="50%"/>
+  <br>
+</p>
 
 **A beautiful, cross-platform desktop download manager with AI-powered video analysis.**
 
@@ -176,3 +179,7 @@ Contributions, bug reports and feature requests are welcome. Please open an issu
 ## 📄 License
 
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** — see the [LICENSE](LICENSE) file for details.
+
+The maintainer of KZDownloader cannot be held liable for misuse of this application, as stated in the GPL-3.0 license (section 16).
+The usage of this application may also cause a violation of the Terms of Service between you and the stream provider.
+Users are personally responsible for ensuring they use this software fairly and within legal boundaries.

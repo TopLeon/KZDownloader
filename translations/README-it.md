@@ -1,6 +1,9 @@
 <div align="center">
-
-# KZDownloader
+&nbsp;
+<p align="center">
+  <img src="assets/logo.png" width="50%"/>
+  <br>
+</p>
 
 **A beautiful, cross-platform desktop download manager with AI-powered video analysis.**
 
@@ -20,7 +23,7 @@
 
 ## Panoramica
 
-KZDownloader è un'applicazione desktop cross-platform realizzata con Flutter per scaricare video, musica e file generici da centinaia di siti web. Integra un assistente AI in grado di riassumere contenuti video di YouTube e rispondere a domande su di essi.
+KZDownloader è un'applicazione desktop cross-platform realizzata con Flutter per scaricare video, musica e file generici da centinaia di siti web. Integra un assistente AI in grado di riassumere video di YouTube e rispondere a domande su di essi.
 
 L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **File generici** — ognuna con la propria vista e i propri controlli. Il design è moderno, minimale e completamente reattivo, con bordi animati a gradiente neon/arcobaleno sulle card di download e sugli elementi interattivi, transizioni fluide e feedback in tempo reale.
 
@@ -172,3 +175,7 @@ lib/
 ## 🤝 Contribuire
 
 Contributi, segnalazioni di bug e richieste di funzionalità sono benvenuti. Apri una issue o invia una pull request.
+
+The maintainer of KZDownloader cannot be held liable for misuse of this application, as stated in the GPL-3.0 license (section 16).
+The usage of this application may also cause a violation of the Terms of Service between you and the stream provider.
+Users are personally responsible for ensuring they use this software fairly and within legal boundaries.
