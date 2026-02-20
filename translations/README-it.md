@@ -10,7 +10,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)]()
 
 
-[English](https://github.com/TopLeon/KZDownloader/main/README.md) &nbsp;•&nbsp; [Italiano](#italian)
+[English](https://github.com/TopLeon/KZDownloader/blob/main/README.md) &nbsp;•&nbsp; [Italiano](#italian)
 
 </div>
 
