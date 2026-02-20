@@ -99,6 +99,8 @@ The design is modern, minimal, and fully reactive, featuring animated neon/rainb
 
 Pre-compiled binaries for Windows, macOS, and Linux are available directly in the [**Releases**](../../releases) section — no build environment needed.
 
+> ⚠️ macOS Users: Since the app is currently self-signed, Gatekeeper will block it on first launch. To run it, Right-click the app, select Open, and then click Open again in the dialog box.
+
 ## 🏗️ Architecture & Tech Stack
 
 | Layer | Technology |
