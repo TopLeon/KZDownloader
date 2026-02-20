@@ -29,8 +29,7 @@ The interface is organized into dedicated sections — **Videos**, **Music**, an
 
 ## 🕹️ Demo
 
-<video src="./img/demo.mp4" controls="controls" autoplay="autoplay" loop="loop" muted="muted" style="max-width: 100%;">
-</video>
+<img src="./img/demo.gif" width="100%">
 
 ## ✨ Features
 
