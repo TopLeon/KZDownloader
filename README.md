@@ -160,7 +160,7 @@ For AI features, open **Settings** and choose an AI provider:
 | Windows | ✅ Full support |
 | macOS | ✅ Full support (adapted layout) |
 | Linux | ✅ Full support |
-| Android / iOS | ⚠️ Experimental (not primary target) |
+| Android / iOS | ⚠️ Not supported |
 
 ## 🗂️ Project Structure
 

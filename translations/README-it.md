@@ -79,13 +79,13 @@ L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **F
 
 &nbsp;
 <p align="center">
-  <img src="./img/1.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./img/2.png" width="45%">
+  <img src="../img/1.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../img/2.png" width="45%">
 </p>
 &nbsp;
 <p align="center">
-  <img src="./img/3.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./img/4.png" width="45%">
+  <img src="../img/3.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="../img/4.png" width="45%">
 </p>
 &nbsp;
 
@@ -160,7 +160,7 @@ Per le funzionalità AI, apri le **Impostazioni** e scegli un provider:
 | Windows | ✅ Pieno supporto |
 | macOS | ✅ Pieno supporto (layout adattato) |
 | Linux | ✅ Pieno supporto |
-| Android / iOS | ⚠️ Sperimentale (non target primario) |
+| Android / iOS | ⚠️ Non supportato |
 
 ## 🗂️ Struttura del Progetto
 
