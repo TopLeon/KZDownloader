@@ -1,522 +1,131 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:kzdownloader/core/download/logic/chunck_downloader.dart';
-import 'package:kzdownloader/core/download/logic/idm_downloader.dart';
-import 'package:kzdownloader/core/services/db_service.dart';
-import 'package:kzdownloader/core/utils/download_helper.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
 import 'package:kzdownloader/models/download_task.dart';
-import 'package:kzdownloader/core/utils/utils.dart';
-import 'package:kzdownloader/core/download/logic/yt_dlp_service.dart';
-import 'package:kzdownloader/src/rust/api/download.dart';
+import 'package:kzdownloader/core/services/db_service.dart';
+import 'package:kzdownloader/core/services/download_service.dart';
 import 'package:kzdownloader/core/services/settings_service.dart';
-import 'package:kzdownloader/core/services/llm_service.dart';
+import 'package:kzdownloader/core/utils/utils.dart';
+import 'package:kzdownloader/core/utils/download_helper.dart';
+import 'package:kzdownloader/core/utils/checksum_verifier.dart';
+import 'package:disk_space_2/disk_space_2.dart';
+
+import 'package:kzdownloader/core/download/logic/yt_dlp_service.dart';
+import 'package:kzdownloader/core/download/providers/summary_provider.dart';
+import 'package:kzdownloader/core/download/providers/url_metadata.dart';
+
+import 'package:kzdownloader/core/download/strategies/download_strategy.dart';
+import 'package:kzdownloader/core/download/strategies/standard_download_strategy.dart';
+import 'package:kzdownloader/core/download/strategies/idm_download_strategy.dart';
+import 'package:kzdownloader/core/download/strategies/ytdlp_strategy.dart';
+import 'package:kzdownloader/core/download/strategies/playlist_strategy.dart';
+import 'package:kzdownloader/core/download/strategies/download_manager.dart';
 
 part 'download_provider.g.dart';
 
+// ===========================================================================
+// Support Providers
+// ===========================================================================
+
 @Riverpod(keepAlive: true)
-DbService dbService(Ref ref) {
-  return DbService();
-}
+DbService dbService(Ref ref) => DbService();
 
 @Riverpod(keepAlive: true)
 Future<void> dbInit(Ref ref) async {
-  await ref.read(dbServiceProvider).init();
+  final db = ref.read(dbServiceProvider);
+  await db.init();
+  await _sanitizeZombieTasks(db);
+}
+
+// Resets tasks left in a running state after an app crash.
+Future<void> _sanitizeZombieTasks(DbService db) async {
+  final tasks = await db.getAllTasks();
+  for (var task in tasks) {
+    if (task.downloadStatus == WorkStatus.running ||
+        task.summaryStatus == WorkStatus.running) {
+      await db.updateTask(task.id, (t) {
+        if (t.downloadStatus == WorkStatus.running) {
+          t.downloadStatus = WorkStatus.paused;
+        }
+        if (t.summaryStatus == WorkStatus.running) {
+          t.summaryStatus = WorkStatus.paused;
+        }
+        t.downloadSpeed = null;
+        t.eta = null;
+        t.activeWorkers = 0;
+      });
+    }
+  }
 }
 
 @riverpod
 class SelectedCategory extends _$SelectedCategory {
   @override
   TaskCategory? build() => null;
-
-  void setCategory(TaskCategory? category) {
-    state = category;
-  }
+  void setCategory(TaskCategory? category) => state = category;
 }
 
 @riverpod
 class LastAddedTaskId extends _$LastAddedTaskId {
   @override
   int? build() => null;
-
-  void setTaskId(int id) {
-    state = id;
-  }
+  void setTaskId(int id) => state = id;
 }
 
 @riverpod
 class ExpandedTaskId extends _$ExpandedTaskId {
   @override
   int? build() => null;
+  void setTaskId(int? id) => state = id;
+}
 
-  void setTaskId(int? id) {
-    state = id;
+// High-frequency UI progress map (bypasses Isar for performance).
+@Riverpod(keepAlive: true)
+class ActiveDownloadProgress extends _$ActiveDownloadProgress {
+  @override
+  Map<int, Map<String, dynamic>> build() => {};
+
+  void update(int taskId, Map<String, dynamic> data) {
+    state = {...state, taskId: data};
+  }
+
+  void remove(int taskId) {
+    if (state.containsKey(taskId)) {
+      final newState = Map<int, Map<String, dynamic>>.from(state);
+      newState.remove(taskId);
+      state = newState;
+    }
   }
 }
 
+// ===========================================================================
+// Main Download Provider
+// ===========================================================================
+
 @riverpod
 class DownloadList extends _$DownloadList {
-  final Map<int, Process> _runningProcesses = {};
-  final Map<String, CancelToken> _genericCancelTokens = {};
-  final Map<int, ChunkDownloader> _activeChunkDownloaders = {};
-  final Map<int, IDMDownloader> _activeIdmDownloaders = {};
-  final Map<String, Future<UrlMetadata?>> _metadataCache = {};
-  final Map<String, dynamic> _videoMetadataCache = {};
+  final DownloadManager _manager = DownloadManager();
+
+  final Map<String, Future<UrlMetadata?>> _headRequestCache = {};
+  final Map<String, Future<Map<String, dynamic>>> _ytMetadataCache = {};
 
   @override
   Stream<List<DownloadTask>> build() async* {
     await ref.watch(dbInitProvider.future);
     final db = ref.read(dbServiceProvider);
-    await _sanitizeZombieTasks(db);
     yield* db.watchTasks();
-  }
-
-  // Prefetches metadata for a URL by performing a HEAD request.
-  // Skips video platform URLs as they are handled by yt-dlp.
-  void prefetchMetadata(String url) {
-    if (url.trim().isEmpty) return;
-
-    final provider = UrlUtils.detectProvider(url);
-    if (provider == 'yt-dlp') return;
-
-    if (!_metadataCache.containsKey(url)) {
-      _metadataCache[url] = _performHeadRequest(url);
-    }
-  }
-
-  // Prefetches video metadata using yt-dlp.
-  void prefetchVideoMetadata(String url) {
-    if (url.trim().isEmpty) return;
-
-    final provider = UrlUtils.detectProvider(url);
-    if (provider != 'yt-dlp') return;
-
-    if (!_metadataCache.containsKey(url)) {
-      _metadataCache[url] = _performVideoMetadataExtraction(url);
-    }
-  }
-
-  // Performs video metadata extraction using yt-dlp.
-  Future<UrlMetadata?> _performVideoMetadataExtraction(String url) async {
-    try {
-      final ytDlp = YtDlpService();
-
-      if (UrlUtils.isYouTubePlaylist(url)) {
-        final metadata = await ytDlp.getPlaylistMetadata(url);
-        _videoMetadataCache[url] = metadata;
-      } else {
-        final metadata = await ytDlp.getMetadata(url);
-        _videoMetadataCache[url] = metadata;
-      }
-
-      return UrlMetadata(size: 0, acceptRanges: false, remoteFileName: null);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Performs a HEAD request to retrieve file metadata.
-  Future<UrlMetadata?> _performHeadRequest(String url) async {
-    try {
-      final headRes = await getHeadInfoRust(url: url, headers: {});
-
-      final contentLength = headRes['content-length'];
-      int size = 0;
-      if (contentLength != null) {
-        size = int.tryParse(contentLength) ?? 0;
-      }
-
-      final acceptRangesHeader = headRes['accept-ranges'];
-      final acceptRanges = acceptRangesHeader != null &&
-          acceptRangesHeader.toLowerCase().contains('bytes');
-
-      final contentDisposition = headRes['content-disposition'];
-      final fileName = _parseFileNameFromHeader(contentDisposition);
-
-      return UrlMetadata(
-        size: size,
-        acceptRanges: acceptRanges,
-        remoteFileName: fileName,
-      );
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Sanitizes tasks that were interrupted by app closure.
-  // Marks downloading/summarizing/converting tasks as paused on startup.
-  Future<void> _sanitizeZombieTasks(DbService db) async {
-    final tasks = await db.getAllTasks();
-
-    for (var task in tasks) {
-      if (task.status == 'downloading' ||
-          task.status == 'summarizing' ||
-          task.status == 'converting') {
-        task.status = 'paused';
-        task.errorMessage = "Interrupted by app closure";
-        task.downloadSpeed = null;
-        task.eta = null;
-        await db.saveTask(task);
-      }
-    }
-  }
-
-  // Routes download to appropriate handler based on URL type.
-  // Handles playlists, video platforms (yt-dlp), or generic HTTP downloads.
-  Future<void> _startDownloadCheck(
-    DownloadTask task,
-    ytDlp,
-    db, {
-    String? format,
-    String? quality,
-    bool summarize = false,
-    bool isAudio = false,
-  }) async {
-    if (task.category == TaskCategory.playlist ||
-        UrlUtils.isYouTubePlaylist(task.url)) {
-      task.category = TaskCategory.video;
-      await _startPlaylistDownload(
-        task,
-        ytDlp,
-        db,
-        format: format,
-        quality: quality,
-        isAudio: isAudio,
-      );
-      return;
-    }
-
-    final detectedProvider = UrlUtils.detectProvider(task.url);
-    bool useYtDlp = detectedProvider == 'yt-dlp';
-
-    if (useYtDlp) {
-      task.provider = 'yt-dlp';
-      await _startYtDlpDownload(
-        task,
-        ytDlp,
-        db,
-        format: format,
-        quality: quality,
-        summarize: summarize,
-        isAudio: isAudio,
-      );
-    } else {
-      if (task.provider == 'yt-dlp') task.provider = 'http';
-      await _startSmartDownload(task, db);
-    }
-  }
-
-  // Intelligently routes generic downloads to either Dio (Standard) or IDM (Pro) based on file size.
-  Future<void> _startSmartDownload(DownloadTask task, DbService db) async {
-    try {
-      task.status = 'downloading';
-      task.startedAt = DateTime.now();
-      if (!task.completedSteps.contains('Initialization')) {
-        task.completedSteps = ['Initialization'];
-      }
-      task.errorMessage = null;
-
-      _setSanitizedFileName(task);
-      await db.saveTask(task);
-
-      UrlMetadata? meta;
-      if (!_metadataCache.containsKey(task.url)) {
-        _metadataCache[task.url] = _performHeadRequest(task.url);
-      }
-
-      meta = await _metadataCache[task.url];
-      _metadataCache.remove(task.url);
-
-      int size = 0;
-      bool acceptRanges = false;
-
-      if (meta != null) {
-        size = meta.size;
-        acceptRanges = meta.acceptRanges;
-
-        if (size > 0) {
-          task.totalSize = DownloadHelper.formatBytes(size);
-        }
-
-        if (meta.remoteFileName != null && meta.remoteFileName!.isNotEmpty) {
-          task.title = meta.remoteFileName;
-          task.title = task.title!.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
-        }
-      }
-
-      if (!task.completedSteps.contains('Metadata Retrieval')) {
-        task.completedSteps = [...task.completedSteps, 'Metadata Retrieval'];
-      }
-
-      const int threshold = 100 * 1024 * 1024;
-      bool useIdm;
-      if (task.provider == 'Standard') {
-        useIdm = false;
-      } else if (task.provider == 'Pro') {
-        useIdm = true;
-      } else {
-        useIdm = size >= threshold || size == 0;
-        task.provider = useIdm ? 'Pro' : 'Standard';
-      }
-      await db.saveTask(task);
-
-      if (useIdm) {
-        await _startGenericDownloadIdm(
-          task,
-          db,
-          knownSize: size,
-          knownAcceptRanges: acceptRanges,
-        );
-      } else {
-        await _startGenericDownload(task, db);
-      }
-    } catch (e) {
-      task.status = 'error';
-      task.errorMessage = e.toString();
-      await db.saveTask(task);
-    }
-  }
-
-  // Sets a sanitized filename from URL if task title is missing.
-  void _setSanitizedFileName(DownloadTask task) {
-    if (task.title == null || task.title!.isEmpty) {
-      String rawName = task.url.split('/').last.split('?').first;
-      if (rawName.isEmpty) rawName = "file_download";
-      try {
-        rawName = Uri.decodeComponent(rawName);
-      } catch (_) {}
-      task.title = rawName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
-    }
-  }
-
-  // Handles generic file downloads using Dio (Standard mode).
-  Future<void> _startGenericDownload(DownloadTask task, DbService db) async {
-    try {
-      task.status = 'downloading';
-      task.startedAt = DateTime.now();
-      if (!task.completedSteps.contains('Initialization')) {
-        task.completedSteps = ['Initialization'];
-      }
-      task.errorMessage = null;
-
-      // Title already sanitized by _startSmartDownload
-
-      final settings = SettingsService();
-      final downloadPath = await settings.getDownloadPath();
-
-      final targetDir =
-          downloadPath ?? (await getDownloadsDirectory())?.path ?? '.';
-      task.dirPath = targetDir;
-      task.filePath = "$targetDir${Platform.pathSeparator}${task.title}";
-
-      final cancelToken = CancelToken();
-      _genericCancelTokens[task.id.toString()] = cancelToken;
-
-      final downloader = ChunkDownloader();
-      _activeChunkDownloaders[task.id] = downloader;
-
-      await db.saveTask(task);
-
-      DateTime lastDbSave = DateTime.now();
-      await downloader.download(
-        task.url,
-        "$targetDir/${task.title}",
-        onProgress: (progress, speed, downloaded) {
-          task.progress = progress * 100;
-          final speedMiB = speed / (1024 * 1024);
-          task.downloadSpeed = '${speedMiB.toStringAsFixed(2)}MiB/s';
-
-          // Throttle DB writes to at most once per second
-          final now = DateTime.now();
-          if (now.difference(lastDbSave).inMilliseconds >= 1000) {
-            lastDbSave = now;
-            db.saveTask(task);
-          }
-        },
-      );
-
-      if (!task.completedSteps.contains('Downloading')) {
-        task.completedSteps = [...task.completedSteps, 'Downloading'];
-      }
-
-      task.status = 'completed';
-      task.progress = 100.0;
-      task.downloadSpeed = null;
-      task.eta = null;
-      task.completedAt = DateTime.now();
-      task.processTime = calculateProcessTime(task.startedAt ?? task.createdAt);
-
-      if (!task.completedSteps.contains('Download Completed')) {
-        task.completedSteps.add('Download Completed');
-      }
-
-      _genericCancelTokens.remove(task.id.toString());
-      _activeChunkDownloaders.remove(task.id);
-      await db.saveTask(task);
-    } catch (e) {
-      _genericCancelTokens.remove(task.id.toString());
-      _activeChunkDownloaders.remove(task.id);
-
-      final errorMsg = e.toString().toLowerCase();
-      if ((e is DioException && e.type == DioExceptionType.cancel) ||
-          errorMsg.contains('paused') ||
-          errorMsg.contains('cancelled')) {
-        task.status = 'paused';
-      } else {
-        task.status = 'error';
-        task.errorMessage = e.toString();
-      }
-      await db.saveTask(task);
-    }
-  }
-
-  // Handles large file downloads using IDM (Pro mode) with multi-threaded chunks.
-  Future<void> _startGenericDownloadIdm(
-    DownloadTask task,
-    DbService db, {
-    int? knownSize,
-    bool? knownAcceptRanges,
-  }) async {
-    task.status = 'downloading';
-    task.startedAt = DateTime.now();
-    if (!task.completedSteps.contains('Initialization')) {
-      task.completedSteps = ['Initialization'];
-    }
-    task.errorMessage = null;
-
-    final appSupportDir = await getApplicationSupportDirectory();
-    final metaDir = appSupportDir.path;
-
-    final downloader = IDMDownloader(
-      maxWorkers: 8,
-      minChunkSize: 5 * 1024 * 1024,
-      metaDir: metaDir,
-    );
-
-    _activeIdmDownloaders[task.id] = downloader;
-
-    // Throttle DB writes from the IDM status stream (fires every 500ms)
-    DateTime lastIdmDbSave = DateTime.now();
-    final subscription = downloader.statusStream.listen((data) {
-      if (data['status'] == 'running') {
-        task.progress = (data['progress'] as double) * 100;
-
-        final speedBytesPerSec =
-            data.containsKey('speed') ? (data['speed'] as num).toDouble() : 0.0;
-
-        if (speedBytesPerSec > 0) {
-          final speedMiBPerSec = speedBytesPerSec / (1024 * 1024);
-          task.downloadSpeed = '${speedMiBPerSec.toStringAsFixed(2)}MiB/s';
-        }
-
-        // ETA is pre-calculated by IDMDownloader using stable session-average
-        if (data.containsKey('eta') && data['eta'] != null) {
-          task.eta = data['eta'] as String;
-        }
-
-        if (data.containsKey('activeWorkers')) {
-          task.activeWorkers = data['activeWorkers'] as int?;
-        }
-        if (data.containsKey('totalWorkers')) {
-          task.totalWorkers = data['totalWorkers'] as int?;
-        }
-        if (data.containsKey('workers')) {
-          task.workersProgressJson = jsonEncode(data['workers']);
-        }
-
-        // Persist ~4x per second for smooth progress bar animation
-        final now = DateTime.now();
-        if (now.difference(lastIdmDbSave).inMilliseconds >= 250) {
-          lastIdmDbSave = now;
-          db.saveTask(task);
-        }
-      } else if (data['status'] == 'error') {
-        task.status = 'error';
-        task.errorMessage = data['error'];
-        db.saveTask(task);
-      } else if (data['status'] == 'paused') {
-        task.status = 'paused';
-        db.saveTask(task);
-      }
+    ref.onDispose(() {
+      _manager.pauseAll();
     });
-
-    if (task.title == null || task.title!.isEmpty) {
-      task.title = "file_download";
-    }
-    task.title = task.title!.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
-
-    final settings = SettingsService();
-    final downloadPath = await settings.getDownloadPath();
-
-    final targetDir =
-        downloadPath ?? (await getDownloadsDirectory())?.path ?? '.';
-    task.dirPath = targetDir;
-    task.filePath = "$targetDir${Platform.pathSeparator}${task.title}";
-
-    await db.saveTask(task);
-
-    try {
-      await downloader.download(
-        task.url,
-        "$targetDir/${task.title}",
-        headers: {},
-        knownFileSize: knownSize,
-        knownAcceptRanges: knownAcceptRanges,
-      );
-
-      if (!task.completedSteps.contains('Downloading')) {
-        task.completedSteps = [...task.completedSteps, 'Downloading'];
-      }
-
-      if (task.status != 'error' && task.status != 'paused') {
-        task.status = 'completed';
-        task.progress = 100.0;
-        task.downloadSpeed = null;
-        task.eta = null;
-        task.completedAt = DateTime.now();
-        task.processTime =
-            calculateProcessTime(task.startedAt ?? task.createdAt);
-
-        task.activeWorkers = null;
-        task.totalWorkers = null;
-        task.workersProgressJson = null;
-
-        if (!task.completedSteps.contains('Download Completed')) {
-          task.completedSteps.add('Download Completed');
-        }
-        await db.saveTask(task);
-      }
-    } catch (e) {
-      if (e.toString().contains("Paused")) {
-        task.status = 'paused';
-      } else {
-        task.status = 'error';
-        task.errorMessage = e.toString();
-      }
-      await db.saveTask(task);
-    } finally {
-      subscription.cancel();
-      _activeIdmDownloaders.remove(task.id);
-    }
   }
 
-  // Pauses any type of download task (Generic Dio, IDM, or yt-dlp).
-  Future<void> pauseTaskGen(DownloadTask task) async {
-    if (_genericCancelTokens.containsKey(task.id.toString())) {
-      _genericCancelTokens[task.id.toString()]?.cancel();
-    } else if (_activeIdmDownloaders.containsKey(task.id)) {
-      await _activeIdmDownloaders[task.id]?.pause();
-    } else if (_runningProcesses.containsKey(task.id)) {
-      _runningProcesses[task.id]?.kill();
-      _runningProcesses.remove(task.id);
-    }
-  }
+  // =========================================================================
+  // Public API
+  // =========================================================================
 
-  // Creates and starts a new download task or resumes an existing one.
-  Future<DownloadTask> addTask(
+  Future<DownloadTask?> addTask(
     String rawUrl,
     String provider, {
     String? format,
@@ -526,87 +135,46 @@ class DownloadList extends _$DownloadList {
     bool onlySummary = false,
     String summaryType = 'short',
     TaskCategory? category,
+    String? expectedChecksum,
+    String? checksumAlgorithm,
   }) async {
-    final url = rawUrl;
     final db = ref.read(dbServiceProvider);
-    final ytDlp = YtDlpService();
+    final url = rawUrl.trim();
 
-    TaskCategory finalCategory;
-    bool isVideoPlatform = false;
-
-    if (category != null) {
-      finalCategory = category;
-      isVideoPlatform = finalCategory == TaskCategory.video;
-    } else {
-      finalCategory = UrlUtils.detectCategory(url);
-      isVideoPlatform = finalCategory == TaskCategory.video;
+    TaskCategory finalCategory = category ?? UrlUtils.detectCategory(url);
+    if (finalCategory == TaskCategory.playlist ||
+        UrlUtils.isYouTubePlaylist(url)) {
+      finalCategory = isAudio ? TaskCategory.music : TaskCategory.video;
     }
-
-    if (isAudio) {
+    if (isAudio && finalCategory != TaskCategory.playlist) {
       finalCategory = TaskCategory.music;
     }
 
-    if (!isVideoPlatform) {
-      summarize = false;
-      onlySummary = false;
-    }
-
     final existingTask = await db.findTaskByUrl(url);
-
     if (existingTask != null) {
-      existingTask.createdAt = DateTime.now();
-      if (category != null) {
-        existingTask.category = category;
-      }
-      existingTask.status = 'pending';
-      existingTask.progress = 0;
-      existingTask.downloadSpeed = null;
-      existingTask.eta = null;
-      existingTask.errorMessage = null;
-      existingTask.summaryType = summaryType;
-      existingTask.completedSteps = [];
-
-      await db.saveTask(existingTask);
-
-      ref
-          .read(selectedCategoryProvider.notifier)
-          .setCategory(existingTask.category);
-      ref.read(lastAddedTaskIdProvider.notifier).setTaskId(existingTask.id);
-
-      if (onlySummary && isVideoPlatform) {
-        if (existingTask.summary == null || existingTask.summary!.isEmpty) {
-          _startSummaryGeneration(
-            existingTask,
-            ytDlp,
-            db,
-            onlySummary: true,
-            summaryType: summaryType,
-          );
-        }
-        return existingTask;
-      }
-
-      _startDownloadCheck(
-        existingTask,
-        ytDlp,
-        db,
-        format: format,
-        quality: quality,
-        summarize: summarize,
-        isAudio: isAudio,
-      );
-
-      return existingTask;
+      return _handleExistingTask(existingTask.id, db, finalCategory, provider,
+          format, quality, summarize, isAudio, onlySummary, summaryType);
     }
 
     final task = DownloadTask()
       ..url = url
       ..provider = provider
       ..category = finalCategory
-      ..status = onlySummary ? 'summarizing' : 'pending'
       ..progress = 0
       ..summaryType = summaryType
-      ..createdAt = DateTime.now();
+      ..createdAt = DateTime.now()
+      ..isPlaylistContainer =
+          (category == TaskCategory.playlist || UrlUtils.isYouTubePlaylist(url))
+      ..downloadStatus = onlySummary ? WorkStatus.none : WorkStatus.pending
+      ..summaryStatus =
+          (summarize || onlySummary) ? WorkStatus.pending : WorkStatus.none;
+
+    // Store checksum info if provided
+    if (expectedChecksum != null && expectedChecksum.isNotEmpty) {
+      task.expectedChecksum = expectedChecksum.trim();
+      task.checksumAlgorithm = checksumAlgorithm ??
+          ChecksumVerifier.detectAlgorithm(expectedChecksum);
+    }
 
     await db.saveTask(task);
 
@@ -614,893 +182,506 @@ class DownloadList extends _$DownloadList {
     ref.read(lastAddedTaskIdProvider.notifier).setTaskId(task.id);
     ref.read(expandedTaskIdProvider.notifier).setTaskId(task.id);
 
-    if (onlySummary && isVideoPlatform) {
-      _startSummaryGeneration(
-        task,
-        ytDlp,
-        db,
-        onlySummary: true,
-        summaryType: summaryType,
-      );
+    if (onlySummary) {
+      await _ensureMetadata(task.id, url, provider);
+      final freshTask = await db.getTask(task.id);
+      if (freshTask != null) {
+        ref.read(summaryManagerProvider.notifier).generateSummary(freshTask,
+            summaryType: summaryType, skipMetadataRetrieval: true);
+      }
     } else {
-      _startDownloadCheck(
-        task,
-        ytDlp,
-        db,
-        format: format,
-        quality: quality,
-        summarize: summarize,
-        isAudio: isAudio,
-      );
+      _startDownloadStrategy(task.id,
+          format: format,
+          quality: quality,
+          isAudio: isAudio,
+          summarize: summarize);
     }
 
-    return task;
+    return (await db.getTask(task.id))!;
   }
 
-  // Creates a summary-only task for a video URL without downloading.
-  Future<DownloadTask> addSummaryTask(String url) async {
-    return addTask(url, 'yt-dlp', onlySummary: true, summaryType: 'short');
-  }
-
-  // Manually triggers summary generation for an existing task.
-  Future<void> generateSummary(DownloadTask task) async {
-    final db = ref.read(dbServiceProvider);
-    final ytDlp = YtDlpService();
-
-    task.status = 'summarizing';
-    if (task.summaryType == null || task.summaryType!.isEmpty) {
-      task.summaryType = 'short';
-    }
-    await db.saveTask(task);
-
-    _startSummaryGeneration(
-      task,
-      ytDlp,
-      db,
-      onlySummary: true,
-      summaryType: task.summaryType!,
-    );
-  }
-
-  Future<void> _startSummaryGeneration(
-    DownloadTask task,
-    YtDlpService ytDlp,
-    DbService db, {
-    bool onlySummary = false,
-    bool skipMetadataRetrieval = false,
-    String summaryType = 'short',
-  }) async {
-    try {
-      String description = '';
-      if (!task.completedSteps.contains('Initialization')) {
-        task.completedSteps = ['Initialization'];
-      }
-      await db.saveTask(task);
-
-      if (onlySummary) {
-        task.status = 'summarizing';
-        task.title = task.title ?? 'Analyzing...';
-        await db.saveTask(task);
-      }
-
-      if (!skipMetadataRetrieval && (onlySummary || task.title == null)) {
-        if (_metadataCache.containsKey(task.url)) {
-          await _metadataCache[task.url];
-          _metadataCache.remove(task.url);
-        }
-
-        dynamic metadata = _videoMetadataCache[task.url];
-        if (metadata == null) {
-          metadata = await ytDlp.getMetadata(task.url);
-        } else {
-          _videoMetadataCache.remove(task.url);
-        }
-        task.title = metadata['title'];
-        task.thumbnail = metadata['thumbnail'];
-        description = metadata['description'] ?? '';
-
-        if (metadata.containsKey('channelId')) {
-          task.channelId = metadata['channelId'];
-        }
-        if (metadata.containsKey('channel')) {
-          task.channelName = metadata['channel'];
-        }
-
-        Map<String, String> details = {};
-        if (task.stepDetailsJson != null) {
-          try {
-            details = Map<String, String>.from(
-              jsonDecode(task.stepDetailsJson!),
-            );
-          } catch (_) {}
-        }
-        details['Metadata Retrieval'] = const JsonEncoder.withIndent(
-          '  ',
-        ).convert(metadata);
-        task.stepDetailsJson = jsonEncode(details);
-
-        if (!task.completedSteps.contains('Metadata Retrieval')) {
-          task.completedSteps = [...task.completedSteps, 'Metadata Retrieval'];
-        }
-        await db.saveTask(task);
-      } else {
-        description = _extractDescriptionFromMetadata(task);
-      }
-
-      if (!task.completedSteps.contains('Subtitle Extraction')) {
-        task.completedSteps = [...task.completedSteps, 'Subtitle Extraction'];
-        await db.saveTask(task);
-      }
-
-      final settings = SettingsService();
-      final lang = await settings.getLanguage();
-      final langCode = lang == 'it' ? 'it' : 'en';
-      String? subtitleText = '';
-
-      if (!skipMetadataRetrieval) {
-        subtitleText = await ytDlp.fetchVideoSubtitles(
-          task.url,
-          langCode: langCode,
-        );
-      } else {
-        subtitleText = task.cachedTranscript;
-      }
-
-      if (subtitleText != null) {
-        if (subtitleText.isNotEmpty) {
-          String cached = subtitleText;
-          final settings = SettingsService();
-          final maxChars = await settings.getMaxCharactersForAI();
-          if (cached.length > maxChars) {
-            cached = "${cached.substring(0, maxChars)}\n[TRUNCATED]";
-          }
-          task.cachedTranscript = cached;
-          task.cachedDescription = description;
-          await db.saveTask(task);
-        }
-
-        if (!task.completedSteps.contains('Summary Generation')) {
-          task.completedSteps = [...task.completedSteps, 'Summary Generation'];
-          await db.saveTask(task);
-        }
-
-        final llmService = LlmService();
-        final targetLangName = lang == 'it' ? 'Italian' : 'English';
-
-        final settings = SettingsService();
-        final maxChars = await settings.getMaxCharactersForAI();
-
-        final summaryStream = await llmService.generateSummary(
-          subtitleText: task.cachedTranscript ?? '',
-          targetLanguageName: targetLangName,
-          videoTitle: task.title ?? 'Unknown Video',
-          videoDescription: description,
-          maxCharacters: maxChars,
-        );
-
-        String fullSummary = '';
-        await for (final chunk in summaryStream) {
-          fullSummary += chunk;
-        }
-
-        if (fullSummary.trim().isEmpty) {
-          throw Exception("AI generated an empty response. Please try again.");
-        }
-
-        task.summary = fullSummary;
-
-        if (onlySummary || task.status == 'summarizing') {
-          task.status = 'completed';
-          task.progress = 100.0;
-          task.errorMessage = null;
-
-          if (!task.completedSteps.contains('Completed')) {
-            task.completedSteps = [...task.completedSteps, 'Completed'];
-          }
-        }
-
-        await db.saveTask(task);
-      } else {
-        if (task.status == 'summarizing') {
-          task.status = 'completed';
-          if (!task.completedSteps.contains('Completed')) {
-            task.completedSteps = [...task.completedSteps, 'Completed'];
-          }
-        }
-        await db.saveTask(task);
-      }
-    } catch (e) {
-      if (onlySummary) {
-        task.status = 'error';
-        task.errorMessage = e.toString().replaceAll("Exception: ", "");
-      } else {
-        if (task.status == 'summarizing') {
-          task.status = 'completed';
-          if (!task.completedSteps.contains('Completed')) {
-            task.completedSteps = [...task.completedSteps, 'Completed'];
-          }
-        }
-      }
-      await db.saveTask(task);
-    }
-  }
-
-  // Extracts description from cached metadata JSON.
-  String _extractDescriptionFromMetadata(DownloadTask task) {
-    if (task.stepDetailsJson != null) {
-      try {
-        final details = jsonDecode(task.stepDetailsJson!);
-        if (details is Map && details.containsKey('Metadata Retrieval')) {
-          final metaJson = details['Metadata Retrieval'];
-          if (metaJson is String) {
-            final meta = jsonDecode(metaJson);
-            if (meta is Map) {
-              return meta['description'] ?? '';
-            }
-          }
-        }
-      } catch (_) {}
-    }
-    return '';
-  }
-
-  // Pauses a download task by stopping all associated processes and updating state.
   Future<void> pauseTask(int id) async {
-    final process = _runningProcesses[id];
-    if (process != null) {
-      process.kill();
-      _runningProcesses.remove(id);
+    if (_manager.hasActive(id)) {
+      await _manager.get(id)?.pause();
     }
-
-    if (_activeIdmDownloaders.containsKey(id)) {
-      await _activeIdmDownloaders[id]?.pause();
-      _activeIdmDownloaders.remove(id);
-    }
-
-    if (_activeChunkDownloaders.containsKey(id)) {
-      _activeChunkDownloaders[id]?.pause();
-      _activeChunkDownloaders.remove(id);
-    }
-
-    final strId = id.toString();
-    if (_genericCancelTokens.containsKey(strId)) {
-      _genericCancelTokens[strId]?.cancel();
-      _genericCancelTokens.remove(strId);
-    }
+    _manager.onCancel(id);
 
     final db = ref.read(dbServiceProvider);
-    final task = await db.getTask(id);
-    if (task != null) {
-      task.status = 'paused';
-      await db.saveTask(task);
-    }
+    await db.updateTask(id, (t) {
+      if (t.downloadStatus == WorkStatus.running ||
+          t.downloadStatus == WorkStatus.pending) {
+        t.downloadStatus = WorkStatus.paused;
+      }
+    });
   }
 
-  // Resumes a paused download task.
   Future<void> resumeTask(int id) async {
     final db = ref.read(dbServiceProvider);
     final task = await db.getTask(id);
-    if (task != null) {
-      final ytDlp = YtDlpService();
-      if (task.status == 'summarizing') {
-        _startSummaryGeneration(task, ytDlp, db, onlySummary: true);
-      } else if (task.provider == 'yt-dlp') {
-        _startYtDlpDownload(task, ytDlp, db, summarize: false);
-      } else {
-        _startSmartDownload(task, db);
-      }
+    if (task == null) return;
+    if (task.downloadStatus == WorkStatus.running) return;
+    if (task.downloadStatus.isFinished &&
+        task.downloadStatus != WorkStatus.failed) {
+      ref.read(activeDownloadProgressProvider.notifier).remove(task.id);
+      return;
     }
+
+    _startDownloadStrategy(id);
   }
 
-  // Retries a failed download by resetting progress and restarting.
+  // Resets task state and restarts from scratch.
   Future<void> retryDownload(int id) async {
     final db = ref.read(dbServiceProvider);
     final task = await db.getTask(id);
-    if (task != null) {
-      task.status = 'pending';
-      task.progress = 0;
-      task.errorMessage = null;
-      task.completedSteps = [];
-      task.playlistCompletedVideos = 0;
-      task.startedAt = DateTime.now();
-      await db.saveTask(task);
+    if (task == null) return;
+    if (task.downloadStatus == WorkStatus.running) return;
 
-      final ytDlp = YtDlpService();
-
-      if (task.isPlaylistContainer || UrlUtils.isYouTubePlaylist(task.url)) {
-        _startPlaylistDownload(task, ytDlp, db);
-      } else if (task.provider == 'yt-dlp' ||
-          task.category == TaskCategory.video) {
-        _startYtDlpDownload(task, ytDlp, db);
-      } else {
-        _startSmartDownload(task, db);
-      }
+    if (_manager.hasActive(id)) {
+      await _manager.get(id)?.cancel();
+      _manager.unregister(id);
     }
+
+    await db.updateTask(id, (t) {
+      t.downloadStatus = WorkStatus.pending;
+      t.progress = 0;
+      t.createdAt = DateTime.now();
+      t.downloadSpeed = null;
+      t.eta = null;
+      t.errorMessage = null;
+      t.completedSteps =
+          t.completedSteps.where((s) => s != 'Download Completed').toList();
+    });
+
+    _startDownloadStrategy(id);
   }
 
-  // Regenerates the summary for an existing task using cached data.
-  Future<void> regenerateSummary(DownloadTask task) async {
+  Future<void> cancelTask(int id) async {
     final db = ref.read(dbServiceProvider);
-    final ytDlp = YtDlpService();
-    task.status = 'summarizing';
-    task.errorMessage = null;
-    task.completedSteps = task.completedSteps
-        .where(
-          (s) =>
-              s != 'Subtitle Extraction' &&
-              s != 'Summary Generation' &&
-              s != 'Completed',
-        )
-        .toList();
 
-    await db.saveTask(task);
-    _startSummaryGeneration(task, ytDlp, db,
-        onlySummary: true,
-        summaryType: task.summaryType ?? 'short',
-        skipMetadataRetrieval: true);
-  }
-
-  // Deletes a task, stops all processes, removes metadata files.
-  // If task is a playlist container, deletes all child video tasks.
-  Future<void> deleteTask(int id) async {
-    final process = _runningProcesses[id];
-    if (process != null) {
-      process.kill();
-      _runningProcesses.remove(id);
-    }
-
-    if (_genericCancelTokens.containsKey(id.toString())) {
-      _genericCancelTokens[id.toString()]?.cancel();
-      _genericCancelTokens.remove(id.toString());
-    }
-
-    if (_activeIdmDownloaders.containsKey(id)) {
-      await _activeIdmDownloaders[id]?.pause();
-      _activeIdmDownloaders.remove(id);
-    }
-
-    final db = ref.read(dbServiceProvider);
     final task = await db.getTask(id);
-
-    final currentExpandedId = ref.read(expandedTaskIdProvider);
-    if (currentExpandedId == id) {
-      final allTasks = await db.getAllTasks();
-      if (allTasks.isNotEmpty) {
-        ref.read(expandedTaskIdProvider.notifier).setTaskId(allTasks.first.id);
-      } else {
-        ref.read(expandedTaskIdProvider.notifier).setTaskId(null);
+    if (task != null && task.isPlaylistContainer) {
+      final children =
+          (await db.getAllTasks()).where((t) => t.playlistParentId == id);
+      for (var child in children) {
+        if (!child.downloadStatus.isFinished) await cancelTask(child.id);
       }
     }
 
-    if (task != null && (task.provider == 'Pro' || task.provider == 'http')) {
-      final appSupportDir = await getApplicationSupportDirectory();
-      final metaDir = appSupportDir.path;
+    if (_manager.hasActive(id)) {
+      await _manager.get(id)?.cancel();
+    }
+    _manager.onCancel(id);
 
-      if (task.filePath != null && task.title != null) {
-        final fileName = task.title!;
-        final metaPath = "$metaDir${Platform.pathSeparator}$fileName.meta";
-        final metaFile = File(metaPath);
-        if (await metaFile.exists()) {
-          await metaFile.delete();
-        }
+    await db.updateTask(id, (t) {
+      t.downloadStatus = WorkStatus.cancelled;
+      if (t.summaryStatus.isActive || t.summaryStatus == WorkStatus.pending) {
+        t.summaryStatus = WorkStatus.cancelled;
+      }
+    });
+    ref.read(activeSummariesProvider.notifier).remove(id);
+  }
 
-        final oldMetaPath = "${task.filePath}/${task.title}.meta";
-        final oldMetaFile = File(oldMetaPath);
-        if (await oldMetaFile.exists()) {
-          await oldMetaFile.delete();
-        }
+  Future<void> deleteTask(int id) async {
+    await cancelTask(id);
+    final db = ref.read(dbServiceProvider);
+
+    final task = await db.getTask(id);
+    if (task != null && task.isPlaylistContainer) {
+      final children =
+          (await db.getAllTasks()).where((t) => t.playlistParentId == id);
+      for (var c in children) {
+        await db.deleteTask(c.id);
       }
     }
 
     await db.deleteTask(id);
+    ref.read(activeSummariesProvider.notifier).remove(id);
+  }
 
-    if (task != null && task.isPlaylistContainer) {
-      final allTasks = await db.getAllTasks();
-      final childTasks =
-          allTasks.where((t) => t.playlistParentId == task.id).toList();
+  // =========================================================================
+  // Private Logic
+  // =========================================================================
 
-      for (final childTask in childTasks) {
-        final childProcess = _runningProcesses[childTask.id];
-        if (childProcess != null) {
-          childProcess.kill();
-          _runningProcesses.remove(childTask.id);
+  Future<DownloadTask?> _handleExistingTask(
+      int taskId,
+      DbService db,
+      TaskCategory newCat,
+      String provider,
+      String? format,
+      String? quality,
+      bool summarize,
+      bool isAudio,
+      bool onlySummary,
+      String summaryType) async {
+    final task = await db.getTask(taskId);
+    if (task == null) return null;
+
+    if (task.downloadStatus == WorkStatus.running) {
+      if (onlySummary) {
+        await db.updateTask(taskId, (t) => t.summaryType = summaryType);
+        final fresh = await db.getTask(taskId);
+        if (fresh != null) {
+          ref.read(summaryManagerProvider.notifier).generateSummary(fresh,
+              summaryType: summaryType, skipMetadataRetrieval: true);
         }
-
-        await db.deleteTask(childTask.id);
       }
-    }
-  }
-
-  // Cancels a download and deletes the downloaded file and metadata.
-  Future<void> cancelTask(int id) async {
-    final process = _runningProcesses[id];
-    if (process != null) {
-      process.kill();
-      _runningProcesses.remove(id);
+      return db.getTask(taskId);
     }
 
-    if (_activeIdmDownloaders.containsKey(id)) {
-      await _activeIdmDownloaders[id]?.pause();
-      _activeIdmDownloaders.remove(id);
-    }
+    await db.updateTask(taskId, (t) {
+      t.category = newCat;
+      t.provider = provider;
+      t.summaryType = summaryType;
+      t.createdAt = DateTime.now();
+      t.errorMessage = null;
 
-    final strId = id.toString();
-    if (_genericCancelTokens.containsKey(strId)) {
-      _genericCancelTokens[strId]?.cancel();
-      _genericCancelTokens.remove(strId);
-    }
-
-    final db = ref.read(dbServiceProvider);
-    final task = await db.getTask(id);
-
-    if (task != null) {
-      if (task.filePath != null && task.title != null) {
-        final file = File(
-          "${task.filePath}${Platform.pathSeparator}${task.title}",
-        );
-        if (await file.exists()) {
-          await file.delete();
-        }
-
-        final appSupportDir = await getApplicationSupportDirectory();
-        final metaPath =
-            "${appSupportDir.path}${Platform.pathSeparator}${task.title}.meta";
-        if (await File(metaPath).exists()) await File(metaPath).delete();
-
-        final localMeta = File("${file.path}.meta");
-        if (await localMeta.exists()) await localMeta.delete();
+      if (onlySummary) {
+        t.downloadStatus = WorkStatus.none;
+        t.summaryStatus = WorkStatus.pending;
+      } else {
+        t.downloadStatus = WorkStatus.pending;
+        t.summaryStatus = summarize
+            ? WorkStatus.pending
+            : (t.summaryStatus.isActive ? t.summaryStatus : WorkStatus.none);
       }
+    });
 
-      task.status = 'cancelled';
-      task.progress = 0;
-      task.downloadSpeed = null;
-      task.eta = null;
-
-      await db.saveTask(task);
-    }
-  }
-
-  // Clears all download history.
-  Future<void> clearHistory() async {
-    final db = ref.read(dbServiceProvider);
-    await db.clearAllTasks();
-  }
-
-  // Deletes all tasks in a specific category.
-  Future<void> clearCategory(TaskCategory category) async {
-    final db = ref.read(dbServiceProvider);
-    final tasks = await db.getAllTasks();
-
-    for (var task in tasks) {
-      if (task.category == category) {
-        final process = _runningProcesses[task.id];
-        if (process != null) {
-          process.kill();
-          _runningProcesses.remove(task.id);
-        }
-        await db.deleteTask(task.id);
+    if (onlySummary) {
+      await _ensureMetadata(taskId, task.url, provider);
+      final fresh = await db.getTask(taskId);
+      if (fresh != null) {
+        ref.read(summaryManagerProvider.notifier).generateSummary(fresh,
+            summaryType: summaryType, skipMetadataRetrieval: true);
       }
+    } else {
+      _startDownloadStrategy(taskId,
+          format: format,
+          quality: quality,
+          isAudio: isAudio,
+          summarize: summarize);
     }
+
+    return db.getTask(taskId);
   }
 
-  // Handles playlist downloads by creating individual tasks for each video.
-  // Downloads videos concurrently with user-defined limits.
-  Future<void> _startPlaylistDownload(
-    DownloadTask task,
-    YtDlpService ytDlp,
-    DbService db, {
+  // Selects and launches the correct download strategy for a task.
+  // Routes through DownloadManager queue for global concurrency control.
+  Future<void> _startDownloadStrategy(
+    int taskId, {
     String? format,
     String? quality,
     bool isAudio = false,
+    bool summarize = false,
   }) async {
-    try {
-      task.status = 'downloading';
-      task.startedAt = DateTime.now();
-      task.isPlaylistContainer = true;
-      if (!task.completedSteps.contains('Initialization')) {
-        task.completedSteps = ['Initialization'];
-      }
-      await db.saveTask(task);
+    final db = ref.read(dbServiceProvider);
 
-      if (_metadataCache.containsKey(task.url)) {
-        await _metadataCache[task.url];
-        _metadataCache.remove(task.url);
-      }
-
-      dynamic playlistMeta = _videoMetadataCache[task.url];
-      if (playlistMeta == null) {
-        playlistMeta = await ytDlp.getPlaylistMetadata(task.url);
-      } else {
-        _videoMetadataCache.remove(task.url);
-      }
-      task.title = playlistMeta['title'] ?? 'Playlist';
-      task.channelName = playlistMeta['uploader'] ?? 'Unknown';
-      task.thumbnail = playlistMeta['thumbnail'];
-      task.playlistId = UrlUtils.extractPlaylistId(task.url);
-
-      final videos = playlistMeta['videos'] as List<dynamic>;
-      task.playlistTotalVideos = videos.length;
-      task.playlistCompletedVideos = 0;
-
-      if (!task.completedSteps.contains('Metadata Retrieval')) {
-        task.completedSteps = [...task.completedSteps, 'Metadata Retrieval'];
-      }
-
-      Map<String, String> details = {};
-      details['Playlist Info'] =
-          'Playlist: ${task.title}\nVideo Count: ${videos.length}\nUploader: ${task.channelName}';
-      task.stepDetailsJson = jsonEncode(details);
-      await db.saveTask(task);
-
+    // Resolve format from settings if not explicitly provided
+    if (format == null || format.isEmpty) {
       final settings = SettingsService();
-      final baseDownloadPath = await settings.getDownloadPath();
+      final defaultFormat = isAudio
+          ? await settings.getDefaultAudioFormat()
+          : await settings.getDefaultFormat();
+      format = defaultFormat.name;
+    }
 
-      String sanitizedPlaylistName = (task.title ?? 'Playlist')
-          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-          .trim();
+    final initialTask = await db.getTask(taskId);
+    if (initialTask == null) return;
 
-      final playlistFolder = '$baseDownloadPath/$sanitizedPlaylistName';
-      final directory = Directory(playlistFolder);
-      if (!await directory.exists()) {
-        await directory.create(recursive: true);
+    // Fetch yt-dlp metadata if needed (do this before queueing so title resolves)
+    if (UrlUtils.detectProvider(initialTask.url) == 'yt-dlp' ||
+        initialTask.provider == 'yt-dlp') {
+      await _ensureMetadata(taskId, initialTask.url, initialTask.provider);
+    }
+
+    // Capture resolved format for closure
+    final resolvedFormat = format;
+
+    // Enqueue through the manager — it will call the callback when
+    // the concurrency limit allows.
+    await _manager.enqueue(taskId, () async {
+      await _executeDownloadStrategy(
+        taskId,
+        format: resolvedFormat,
+        quality: quality,
+        isAudio: isAudio,
+        summarize: summarize,
+      );
+    });
+  }
+
+  // Actually executes the download strategy (called by the queue).
+  Future<void> _executeDownloadStrategy(
+    int taskId, {
+    String? format,
+    String? quality,
+    bool isAudio = false,
+    bool summarize = false,
+  }) async {
+    final db = ref.read(dbServiceProvider);
+
+    await db.updateTask(taskId, (t) => t.downloadStatus = WorkStatus.running);
+
+    if (summarize) {
+      final freshTask = await db.getTask(taskId);
+      if (freshTask != null) {
+        ref.read(summaryManagerProvider.notifier).generateSummary(freshTask,
+            summaryType: freshTask.summaryType ?? 'short',
+            skipMetadataRetrieval: true);
+      }
+    }
+
+    final task = await db.getTask(taskId);
+    if (task == null) return;
+
+    DownloadStrategy strategy;
+
+    if (task.isPlaylistContainer || UrlUtils.isYouTubePlaylist(task.url)) {
+      final ytDlp = YtDlpService();
+      strategy = PlaylistStrategy(taskId, db, ref, ytDlp);
+    } else if (UrlUtils.detectProvider(task.url) == 'yt-dlp' ||
+        task.provider == 'yt-dlp') {
+      final ytDlp = YtDlpService();
+      strategy = YtDlpStrategy(taskId, db, ref, ytDlp);
+    } else {
+      final meta = await _performHeadRequest(task.url);
+      if (meta != null) {
+        await db.updateTask(taskId, (t) {
+          if (meta.size > 0) {
+            t.totalSize = DownloadHelper.formatBytes(meta.size);
+          }
+          if (meta.remoteFileName != null &&
+              (t.title == null || t.title!.isEmpty)) {
+            t.title = FileUtils.sanitizeFilename(meta.remoteFileName!);
+          }
+        });
       }
 
-      task.dirPath = playlistFolder;
-      await db.saveTask(task);
+      final size = meta?.size ?? 0;
+      final acceptRanges = meta?.acceptRanges ?? false;
 
-      final maxConcurrentDownloads = await settings.getMaxConcurrentDownloads();
-      final List<DownloadTask> pendingTasks = [];
-
-      for (int i = 0; i < videos.length; i++) {
-        final video = videos[i];
-        final videoUrl = video['url'] ?? video['webpage_url'] ?? '';
-
-        if (videoUrl.isEmpty) continue;
-
-        final videoTask = DownloadTask()
-          ..url = videoUrl
-          ..provider = 'yt-dlp'
-          ..category = isAudio ? TaskCategory.music : TaskCategory.video
-          ..title = video['title'] ?? 'Video ${i + 1}'
-          ..thumbnail = video['thumbnail']
-          ..channelName = task.channelName
-          ..channelId = task.channelId
-          ..playlistParentId = task.id
-          ..status = 'pending'
-          ..progress = 0
-          ..createdAt = DateTime.now();
-
-        await db.saveTask(videoTask);
-        pendingTasks.add(videoTask);
-      }
-
-      int completedCount = 0;
-
-      Future<void> startNextDownload() async {
-        if (pendingTasks.isEmpty) return;
-
-        final videoTask = pendingTasks.removeAt(0);
-
+      // Disk space check for generic downloads with known size
+      if (size > 0) {
         try {
-          await _startYtDlpDownload(
-            videoTask,
-            ytDlp,
-            db,
-            format: format,
-            quality: quality,
-            isAudio: isAudio,
-            customDownloadPath: playlistFolder,
-          );
-
-          completedCount++;
-          final parent = await db.getTask(task.id);
-          if (parent != null) {
-            parent.playlistCompletedVideos = completedCount;
-            parent.progress =
-                completedCount / (parent.playlistTotalVideos ?? 1);
-
-            if (completedCount == parent.playlistTotalVideos) {
-              parent.status = 'completed';
-              parent.completedSteps = [
-                ...parent.completedSteps,
-                'Post-Processing'
-              ];
+          final freeMB = await DiskSpace.getFreeDiskSpace;
+          if (freeMB != null) {
+            final requiredMB =
+                (size / (1024 * 1024)).ceil() + 100; // +100MB safety margin
+            if (freeMB < requiredMB) {
+              throw Exception(
+                  'Insufficient disk space: ${freeMB.toStringAsFixed(0)} MB free, '
+                  '${requiredMB} MB required');
             }
-            await db.saveTask(parent);
           }
         } catch (e) {
-          debugPrint('Playlist video download error: $e');
-        } finally {
-          if (pendingTasks.isNotEmpty) {
-            startNextDownload();
-          }
+          if (e.toString().contains('Insufficient disk space')) rethrow;
+          debugPrint('[DownloadProvider] Disk space check skipped: $e');
         }
       }
 
-      for (int i = 0; i < maxConcurrentDownloads && i < videos.length; i++) {
-        startNextDownload();
-      }
+      bool useIdm = (task.provider == 'Pro' ||
+              (task.provider != 'Standard' && size > 100 * 1024 * 1024)) &&
+          size > 0 &&
+          acceptRanges;
 
-      task.status = 'downloading';
-      if (!task.completedSteps.contains('Download')) {
-        task.completedSteps = [...task.completedSteps, 'Download'];
+      if (useIdm) {
+        strategy = IDMDownloadStrategy(taskId, db, ref,
+            knownSize: size, knownAcceptRanges: acceptRanges);
+      } else {
+        strategy = StandardDownloadStrategy(taskId, db, ref,
+            knownSize: size, knownAcceptRanges: acceptRanges);
       }
-      await db.saveTask(task);
+    }
+
+    _manager.register(taskId, strategy);
+
+    try {
+      await strategy.start(format: format, quality: quality, isAudio: isAudio);
+
+      // Checksum verification after successful download
+      final completedTask = await db.getTask(taskId);
+      if (completedTask != null &&
+          completedTask.downloadStatus == WorkStatus.completed &&
+          completedTask.expectedChecksum != null &&
+          completedTask.checksumAlgorithm != null &&
+          completedTask.filePath != null) {
+        debugPrint('[DownloadProvider] Verifying checksum for task $taskId...');
+        try {
+          final result = await ChecksumVerifier.verify(
+            completedTask.filePath!,
+            completedTask.expectedChecksum!,
+            completedTask.checksumAlgorithm!,
+          );
+          await db.updateTask(taskId, (t) => t.checksumResult = result);
+          debugPrint(
+              '[DownloadProvider] Checksum result for task $taskId: $result');
+        } catch (e) {
+          debugPrint('[DownloadProvider] Checksum error for task $taskId: $e');
+          await db.updateTask(taskId, (t) => t.checksumResult = 'error');
+        }
+      }
     } catch (e) {
-      task.status = 'error';
-      task.errorMessage = e.toString();
-      await db.saveTask(task);
+      debugPrint('[DownloadProvider] Strategy error for task $taskId: $e');
+      await db.updateTask(taskId, (t) {
+        t.downloadStatus = WorkStatus.failed;
+        t.errorMessage = e.toString();
+      });
+    } finally {
+      // Notify queue that this download slot is free
+      _manager.onComplete(taskId);
     }
   }
 
-  // Downloads video/audio using yt-dlp with optional parallel summarization.
-  Future<void> _startYtDlpDownload(
-    DownloadTask task,
-    YtDlpService ytDlp,
-    DbService db, {
-    String? format,
-    String? quality,
-    bool summarize = false,
-    bool isAudio = false,
-    String? customDownloadPath,
-  }) async {
+  /// Updates the URL of a failed/paused task (for link expiration recovery).
+  Future<void> updateTaskUrl(int id, String newUrl) async {
+    final db = ref.read(dbServiceProvider);
+    await db.updateTask(id, (t) {
+      t.url = newUrl.trim();
+      t.errorMessage = null;
+    });
+  }
+
+  // =========================================================================
+  // Prefetch API (UI Optimizations)
+  // =========================================================================
+
+  // Prefetches generic file metadata (HEAD request) for size/name preview.
+  void prefetchMetadata(String url) {
+    if (url.trim().isEmpty) return;
+    if (UrlUtils.detectProvider(url) == 'yt-dlp') return;
+    if (!_headRequestCache.containsKey(url)) {
+      _performHeadRequest(url);
+    }
+  }
+
+  // Prefetches video metadata (title, thumbnail) via yt-dlp.
+  void prefetchVideoMetadata(String url) {
+    if (url.trim().isEmpty) return;
+    if (UrlUtils.detectProvider(url) != 'yt-dlp') return;
+    if (_ytMetadataCache.containsKey(url)) return;
+
+    final ytDlp = YtDlpService();
     try {
-      task.status = 'downloading';
-      task.startedAt = DateTime.now();
-      if (!task.completedSteps.contains('Initialization')) {
-        task.completedSteps = ['Initialization'];
-      }
-      await db.saveTask(task);
+      final future = UrlUtils.isYouTubePlaylist(url)
+          ? ytDlp.getPlaylistMetadata(url)
+          : ytDlp.getMetadata(url);
 
-      if (_metadataCache.containsKey(task.url)) {
-        await _metadataCache[task.url];
-        _metadataCache.remove(task.url);
-      }
+      _ytMetadataCache[url] = future;
 
-      dynamic metadata = _videoMetadataCache[task.url];
-      if (metadata == null) {
-        metadata = await ytDlp.getMetadata(task.url);
+      future.catchError((e) {
+        debugPrint('[DownloadProvider] Prefetch error for $url: $e');
+        _ytMetadataCache.remove(url);
+        return <String, dynamic>{};
+      });
+    } catch (_) {}
+  }
+
+  // Fetches and persists yt-dlp metadata for a task.
+  Future<bool> _ensureMetadata(int taskId, String url, String provider) async {
+    final db = ref.read(dbServiceProvider);
+    final currentTask = await db.getTask(taskId);
+    if (currentTask == null) return false;
+    if (currentTask.title != null && currentTask.title!.isNotEmpty) return true;
+    if (UrlUtils.detectProvider(url) != 'yt-dlp' && provider != 'yt-dlp')
+      return false;
+
+    try {
+      final ytDlp = YtDlpService();
+      Map<String, dynamic> metadata;
+
+      if (_ytMetadataCache.containsKey(url)) {
+        metadata = await _ytMetadataCache[url]!;
       } else {
-        _videoMetadataCache.remove(task.url);
-      }
-      String rawTitle = metadata['title'] ?? 'video';
-      String sanitizedTitle = rawTitle.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
-      task.title = rawTitle;
-      task.thumbnail = metadata['thumbnail'];
-
-      if (metadata.containsKey('channelId')) {
-        task.channelId = metadata['channelId'];
-      }
-      if (metadata.containsKey('channel')) {
-        task.channelName = metadata['channel'];
-      }
-
-      if (!task.completedSteps.contains('Metadata Retrieval')) {
-        task.completedSteps = [...task.completedSteps, 'Metadata Retrieval'];
+        final future = UrlUtils.isYouTubePlaylist(url)
+            ? ytDlp.getPlaylistMetadata(url)
+            : ytDlp.getMetadata(url);
+        _ytMetadataCache[url] = future;
+        metadata = await future;
       }
 
       Map<String, String> details = {};
-      if (task.stepDetailsJson != null) {
+      if (currentTask.stepDetailsJson != null) {
         try {
-          details = Map<String, String>.from(jsonDecode(task.stepDetailsJson!));
+          details = Map<String, String>.from(
+              jsonDecode(currentTask.stepDetailsJson!));
         } catch (_) {}
       }
       details['Metadata Retrieval'] =
           const JsonEncoder.withIndent('  ').convert(metadata);
-      task.stepDetailsJson = jsonEncode(details);
-      await db.saveTask(task);
 
-      if (summarize) {
-        _startSummaryGeneration(task, ytDlp, db, onlySummary: false);
-      }
+      await db.updateTask(taskId, (t) {
+        t.title = metadata['title'];
+        t.thumbnail = metadata['thumbnail'];
+        t.channelId = metadata['channelId'];
+        t.channelName = metadata['channel'] ?? metadata['uploader'];
+        t.cachedDescription = metadata['description'] ?? '';
+        t.stepDetailsJson = jsonEncode(details);
 
-      final settings = SettingsService();
-      final downloadPath =
-          customDownloadPath ?? await settings.getDownloadPath();
-
-      DownloadFormat targetFormat;
-      if (isAudio) {
-        targetFormat = DownloadFormat.mp3;
-      } else if (format != null) {
-        switch (format.toLowerCase()) {
-          case 'mp4':
-            targetFormat = DownloadFormat.mp4;
-            break;
-          case 'mkv':
-            targetFormat = DownloadFormat.mkv;
-            break;
-          case 'mp3':
-            targetFormat = DownloadFormat.mp3;
-            break;
-          case 'm4a':
-            targetFormat = DownloadFormat.m4a;
-            break;
-          default:
-            targetFormat = await settings.getDefaultFormat();
-        }
-      } else {
-        targetFormat = await settings.getDefaultFormat();
-      }
-
-      DownloadQuality targetQuality;
-      if (quality != null) {
-        switch (quality.toLowerCase()) {
-          case '1080p':
-            targetQuality = DownloadQuality.p1080;
-            break;
-          case '720p':
-            targetQuality = DownloadQuality.p720;
-            break;
-          case '480p':
-            targetQuality = DownloadQuality.p480;
-            break;
-          case 'best':
-            targetQuality = DownloadQuality.best;
-            break;
-          case 'medium':
-            targetQuality = DownloadQuality.medium;
-            break;
-          case 'low':
-            targetQuality = DownloadQuality.low;
-            break;
-          default:
-            targetQuality = await settings.getDefaultQuality();
-        }
-      } else {
-        targetQuality = await settings.getDefaultQuality();
-      }
-
-      String extension = '.mp4';
-      switch (targetFormat) {
-        case DownloadFormat.mp4:
-          extension = '.mp4';
-          break;
-        case DownloadFormat.mkv:
-          extension = '.mkv';
-          break;
-        case DownloadFormat.mp3:
-          extension = '.mp3';
-          break;
-        case DownloadFormat.m4a:
-          extension = '.m4a';
-          break;
-      }
-
-      final targetDir =
-          downloadPath ?? (await getDownloadsDirectory())?.path ?? '.';
-      task.dirPath = targetDir;
-      task.filePath =
-          "$targetDir${Platform.pathSeparator}$sanitizedTitle$extension";
-      await db.saveTask(task);
-
-      final tempDir = await getTemporaryDirectory();
-      final appTempDir = Directory('${tempDir.path}/kzdownloader_temp');
-      if (!await appTempDir.exists()) {
-        await appTempDir.create(recursive: true);
-      }
-
-      final process = await ytDlp.startDownload(
-        task.url,
-        targetDir,
-        format: targetFormat,
-        quality: targetQuality,
-        tempPath: appTempDir.path,
-        customFilename: sanitizedTitle,
-      );
-
-      _runningProcesses[task.id] = process;
-
-      // Throttle DB writes from yt-dlp progress (fires very frequently)
-      DateTime lastYtDlpDbSave = DateTime.now();
-      process.stdout.transform(const SystemEncoding().decoder).listen((line) {
-        if (line.contains('[Merger]') || line.contains('[Fixup]')) {
-          if (!task.completedSteps.contains('Processing')) {
-            task.completedSteps = [...task.completedSteps, 'Processing'];
-            db.saveTask(task);
-          }
+        if (UrlUtils.isYouTubePlaylist(url)) {
+          t.playlistTotalVideos = metadata['videoCount'];
+          t.playlistId = metadata['playlistId'];
         }
 
-        final info = ytDlp.parseProgress(line);
-        if (info != null) {
-          if (!task.completedSteps.contains('Downloading')) {
-            task.completedSteps = [...task.completedSteps, 'Downloading'];
-          }
-
-          task.progress = info['progress'] ?? task.progress;
-          if (info.containsKey('speed')) task.downloadSpeed = info['speed'];
-          if (info.containsKey('eta')) task.eta = info['eta'];
-          if (info.containsKey('totalSize')) task.totalSize = info['totalSize'];
-
-          // Persist at most once per second to reduce DB pressure
-          final now = DateTime.now();
-          if (now.difference(lastYtDlpDbSave).inMilliseconds >= 1000) {
-            lastYtDlpDbSave = now;
-            db.saveTask(task);
-          }
+        if (!t.completedSteps.contains('Metadata Retrieval')) {
+          t.completedSteps = [...t.completedSteps, 'Metadata Retrieval'];
         }
       });
 
-      final exitCode = await process.exitCode;
-
-      if (!_runningProcesses.containsKey(task.id)) {
-        return;
-      }
-      _runningProcesses.remove(task.id);
-
-      if (exitCode == 0) {
-        final updatedSteps = Set<String>.from(task.completedSteps);
-        updatedSteps.add('Downloading');
-        updatedSteps.add('Processing');
-        task.completedSteps = updatedSteps.toList();
-
-        if (summarize) {
-          if (task.summary != null && task.summary!.isNotEmpty) {
-            task.status = 'completed';
-            task.progress = 100.0;
-            task.completedAt = DateTime.now();
-            task.processTime =
-                calculateProcessTime(task.startedAt ?? task.createdAt);
-
-            if (!task.completedSteps.contains('Completed')) {
-              task.completedSteps = [...task.completedSteps, 'Completed'];
-            }
-          } else {
-            task.status = 'summarizing';
-          }
-        } else {
-          task.status = 'completed';
-          task.progress = 100.0;
-          task.completedAt = DateTime.now();
-          task.processTime =
-              calculateProcessTime(task.startedAt ?? task.createdAt);
-
-          if (!task.completedSteps.contains('Completed')) {
-            task.completedSteps = [...task.completedSteps, 'Completed'];
-          }
-        }
-        await db.saveTask(task);
-      } else {
-        task.status = 'error';
-        task.errorMessage = 'Process exited with code $exitCode';
-        await db.saveTask(task);
-      }
+      return true;
     } catch (e) {
-      if (!_runningProcesses.containsKey(task.id)) {
-        return;
-      }
-      _runningProcesses.remove(task.id);
-
-      task.status = 'error';
-      task.errorMessage = e.toString();
-      await db.saveTask(task);
+      debugPrint('[DownloadProvider] Metadata fetch error: $e');
+      return false;
     }
   }
-}
 
-// Extracts filename from Content-Disposition header.
-String? _parseFileNameFromHeader(String? contentDisposition) {
-  if (contentDisposition == null) return null;
-  try {
-    final RegExp nameRegex = RegExp(r'filename="?([^"]+)"?');
+  // =========================================================================
+  // HTTP Helpers
+  // =========================================================================
+
+  Future<UrlMetadata?> _performHeadRequest(String url) async {
+    // Don't cache for resume — always get fresh metadata.
+    final future = Future(() async {
+      try {
+        final headRes = await getHeadInfo(url, {});
+        final size = int.tryParse(headRes['content-length'] ?? '0') ?? 0;
+        final acceptRanges =
+            headRes['accept-ranges']?.toLowerCase().contains('bytes') ?? false;
+
+        String? fileName =
+            _parseFileNameFromHeader(headRes['content-disposition']);
+        if (fileName == null || fileName.isEmpty) {
+          try {
+            fileName = Uri.decodeComponent(Uri.parse(url).pathSegments.last);
+          } catch (_) {}
+        }
+        return UrlMetadata(
+            size: size, acceptRanges: acceptRanges, remoteFileName: fileName);
+      } catch (_) {
+        return null;
+      }
+    });
+
+    _headRequestCache[url] = future;
+    return future;
+  }
+
+  String? _parseFileNameFromHeader(String? contentDisposition) {
+    if (contentDisposition == null) return null;
+    final nameRegex = RegExp(r'filename="?([^"]+)"?');
     final match = nameRegex.firstMatch(contentDisposition);
-    if (match != null && match.groupCount >= 1) {
-      return match.group(1);
-    }
-    if (contentDisposition.contains('filename=')) {
-      return contentDisposition.split('filename=').last.trim();
-    }
-  } catch (_) {}
-  return null;
-}
+    if (match != null) return match.group(1);
+    return null;
+  }
 
-class UrlMetadata {
-  final int size;
-  final bool acceptRanges;
-  final String? remoteFileName;
+  Future<void> clearHistory() async {
+    await _manager.pauseAll();
+    await ref.read(dbServiceProvider).clearAllTasks();
+    _headRequestCache.clear();
+    _ytMetadataCache.clear();
+  }
 
-  UrlMetadata({
-    required this.size,
-    required this.acceptRanges,
-    this.remoteFileName,
-  });
+  Future<void> resumeTaskInternal(int id,
+      {String? format, String? quality, bool isAudio = false}) async {
+    _startDownloadStrategy(id,
+        format: format, quality: quality, isAudio: isAudio);
+  }
 }

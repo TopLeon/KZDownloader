@@ -154,7 +154,7 @@ class SettingsTile extends StatelessWidget {
                 if (type == SettingsTileType.navigation && trailing == null)
                   Icon(
                     Icons.chevron_right_rounded,
-                    color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.9),
                   ),
               ],
             ),
@@ -186,7 +186,6 @@ class SettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isLightTheme = Theme.of(context).brightness == Brightness.light;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,12 +211,10 @@ class SettingsSection extends StatelessWidget {
             border: Border.all(color: colorScheme.primary.withOpacity(0.15)),
             boxShadow: [
               BoxShadow(
-                color: isLightTheme
-                    ? colorScheme.shadow.withOpacity(0.1)
-                    : colorScheme.shadow.withOpacity(0.2),
-                blurRadius: 2,
-                offset: const Offset(0, 1),
-              ),
+                color: colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 2),
+              )
             ],
           ),
           child: ClipRRect(

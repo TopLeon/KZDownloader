@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/core/services/audio_player_service.dart';
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
-import 'dart:ui';
 
 // Shows audio metadata (thumbnail, progress), and controls for play/pause/stop.
 // It appears only when there is an active audio track in [AudioState].
@@ -43,7 +43,7 @@ class _AudioPlayerBarState extends ConsumerState<AudioPlayerBar> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        margin: const EdgeInsets.only(bottom: 12, left: 14, right: 14),
+        margin: const EdgeInsets.only(bottom: 0, left: 14, right: 14),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           color:
@@ -52,11 +52,12 @@ class _AudioPlayerBarState extends ConsumerState<AudioPlayerBar> {
           border: Border.all(
               color: colorScheme.primary.withOpacity(0.15), width: 1),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
+            if (hovered)
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 2),
+              )
           ],
         ),
         child: Column(
@@ -67,26 +68,36 @@ class _AudioPlayerBarState extends ConsumerState<AudioPlayerBar> {
                 ClipRRect(
                   borderRadius: const BorderRadius.all(Radius.circular(4)),
                   child: state.currentThumbnail != null
-                      ? Image.network(
-                          state.currentThumbnail!,
-                          height: 30,
-                          width: 30,
-                          fit: BoxFit.cover,
-                          errorBuilder: (BuildContext context, Object exception,
-                              StackTrace? stackTrace) {
-                            return Container(
-                              color: Colors.grey[800],
-                              child: const Icon(Icons.music_note,
-                                  size: 24, color: Colors.white54),
-                            );
-                          },
+                      ? Transform.scale(
+                          scale: 1.35,
+                          child: CachedNetworkImage(
+                            imageUrl: state.currentThumbnail!,
+                            height: 32,
+                            width: 32,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.medium,
+                            errorWidget: (context, url, error) {
+                              return Container(
+                                height: 32,
+                                width: 32,
+                                color: Theme.brightnessOf(context) ==
+                                        Brightness.dark
+                                    ? Colors.grey[800]
+                                    : Colors.grey[500],
+                                child: const Icon(Icons.music_note,
+                                    size: 18, color: Colors.white54),
+                              );
+                            },
+                          ),
                         )
                       : Container(
-                          height: 30,
-                          width: 30,
-                          color: Colors.grey[800],
+                          height: 32,
+                          width: 32,
+                          color: Theme.brightnessOf(context) == Brightness.dark
+                              ? Colors.grey[800]
+                              : Colors.grey[500],
                           child: const Icon(Icons.music_note,
-                              size: 24, color: Colors.white54),
+                              size: 18, color: Colors.white54),
                         ),
                 ),
                 const SizedBox(
@@ -100,7 +111,7 @@ class _AudioPlayerBarState extends ConsumerState<AudioPlayerBar> {
                         _MarqueeText(
                           text: state.currentTitle ?? l10n.analyzing,
                           style: GoogleFonts.montserrat(
-                            fontSize: 12,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                             color: colorScheme.onSurface,
                           ),
@@ -111,7 +122,7 @@ class _AudioPlayerBarState extends ConsumerState<AudioPlayerBar> {
                           child: Text(
                             state.currentTitle ?? l10n.analyzing,
                             style: GoogleFonts.montserrat(
-                              fontSize: 12,
+                              fontSize: 13,
                               fontWeight: FontWeight.w500,
                               color: colorScheme.onSurface,
                             ),
@@ -121,7 +132,7 @@ class _AudioPlayerBarState extends ConsumerState<AudioPlayerBar> {
                       Text(
                         state.currentChannel ?? l10n.analyzing,
                         style: GoogleFonts.montserrat(
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.w400,
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -155,7 +166,7 @@ class _AudioPlayerBarState extends ConsumerState<AudioPlayerBar> {
                 Text(
                   _formatDuration(state.position),
                   style: GoogleFonts.montserrat(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -185,7 +196,7 @@ class _AudioPlayerBarState extends ConsumerState<AudioPlayerBar> {
                 Text(
                   _formatDuration(state.duration),
                   style: GoogleFonts.montserrat(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),

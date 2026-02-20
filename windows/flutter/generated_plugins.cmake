@@ -3,14 +3,16 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  disk_space_2
   flutter_secure_storage_windows
   isar_community_flutter_libs
+  media_kit_libs_windows_audio
   screen_retriever_windows
   window_manager
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
-  rust_lib_kzdownloader
+  rhttp_plus
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

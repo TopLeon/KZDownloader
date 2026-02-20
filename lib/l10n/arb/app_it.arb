@@ -21,7 +21,8 @@
     "btnGoSettings": "Vai alle Impostazioni",
     "settingsTitle": "Impostazioni",
     "downloadPath": "Percorso Download",
-    "defaultFormat": "Formato Predefinito",
+    "defaultFormat": "Formato Video Predefinito",
+    "defaultAudioFormat": "Formato Audio Predefinito",
     "defaultQuality": "Qualità Predefinita",
     "language": "Lingua",
     "chatTitle": "Chatta per Scaricare",
@@ -30,6 +31,8 @@
     "aiMagicHint": "Chiedi all'AI (es. 'Solo audio alta qualità')...",
     "videoOptions": "Opzioni Video",
     "qualityBest": "Migliore",
+    "qualityHigh": "Alta",
+    "qualityMedium": "Media",
     "qualityLow": "Bassa",
     "actionDownload": "Scarica",
     "actionSummarize": "Riassumi",
@@ -83,7 +86,7 @@
     "providerProDesc": "Multi-thread, Resume",
     "selectProvider": "Seleziona Provider",
     "optionVideo": "Video",
-    "optionAudio": "Audio",
+    "optionAudio": "Musica",
     "unknownError": "Errore sconosciuto",
     "analyzing": "Analisi in corso...",
     "downloadedWith": "Scaricato con {provider} in {time}",
@@ -256,8 +259,8 @@
   "settingsAI": "Intelligenza Artificiale",
   "settingsAISubtitle": "Crea automaticamente riassunti e risposte intelligenti per i tuoi download",
   "settingsAppearance": "Aspetto",
-  "settingsAppearanceSubtitle": "Scegli un tema per l'interfaccia",
-  "settingsDataStorage": "Dati e Archiviazione",
+  "settingsAppearanceSubtitle": "Scegli un tema per l'interfaccia",    "summaryAnimations": "Animazioni Riassunto",
+    "summaryAnimationsSubtitle": "Abilita testo animato per i riassunti",  "settingsDataStorage": "Dati e Archiviazione",
   "settingsGeneral": "Generale",
   "settingsGeneralSubtitle": "Gestisci le tue preferenze generali",
   "settingsLanguage": "Lingua",
@@ -271,7 +274,7 @@
   "clearDownloadHistory": "Cancella cronologia download",
   "clearDownloadHistorySubtitle": "Rimuovi tutti i download completati dalla lista",
   "versionInfo": "Versione 1.0.0 • Build 2026.2",
-  "copyright": "© 2026 KZDownloader. Progetto Open Source.",
+  "copyright": "© 2026 KZDownloader by Le0nZ (github.com/topleon)",
   "selectLanguageTitle": "Seleziona Lingua",
   "selectThemeTitle": "Seleziona Tema",
   "themeSystem": "Predefinito di Sistema",
@@ -480,5 +483,44 @@
     "seconds": "secondi",
     "millisecond": "ms",
     "milliseconds": "ms",
-    "and": "e"
+    "and": "e",
+    "concurrentDownloadsGlobal": "Download Concorrenti (Globale)",
+    "concurrentDownloadsGlobalDesc": "Numero massimo di file scaricati contemporaneamente",
+    "checksumLabel": "Checksum (opzionale)",
+    "checksumHint": "Se vuoi incolla hash MD5 o SHA256...",
+    "checksumAlgorithm": "Algoritmo",
+    "checksumMatch": "Checksum verificato",
+    "checksumMismatch": "Checksum non corrisponde",
+    "checksumVerifying": "Verifica checksum...",
+    "checksumError": "Errore Checksum",
+    "linkExpired": "Link scaduto (403)",
+    "linkExpiredMessage": "Il link di download è scaduto. Inserisci un nuovo URL per riprendere.",
+    "updateUrl": "Aggiorna URL",
+    "updateUrlTitle": "Aggiorna URL Download",
+    "updateUrlContent": "Il link di download è scaduto. Incolla un nuovo URL per riprendere il download da dove si era fermato.",
+    "updateUrlHint": "Incolla nuovo URL...",
+    "diskSpaceFree": "{space} liberi",
+    "@diskSpaceFree": {
+        "placeholders": {
+            "space": {
+                "type": "String"
+            }
+        }
+    },
+    "insufficientDiskSpace": "Spazio su disco insufficiente. {available} disponibili, {required} necessari.",
+    "@insufficientDiskSpace": {
+        "placeholders": {
+            "available": {
+                "type": "String"
+            },
+            "required": {
+                "type": "String"
+            }
+        }
+    },
+    "cancelDownload": "Annulla",
+    "cancelDownloadTooltip": "Annulla Download",
+    "queued": "In coda",
+    "diskSpace": "Spazio su disco",
+    "insufficientDiskSpace": "Spazio su disco insufficiente"
 }

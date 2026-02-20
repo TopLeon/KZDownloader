@@ -1,6 +1,10 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:kzdownloader/core/services/settings_service.dart';
 
+// Export enums from settings_service for convenience
+export 'package:kzdownloader/core/services/settings_service.dart'
+    show DownloadQuality, QualityMode;
+
 part 'quality_provider.g.dart';
 
 // Data class to hold quality settings
@@ -13,17 +17,22 @@ class QualitySettings {
     required this.mode,
   });
 
-  // Convert to simple quality string (Best, Medium, Low)
+  // Convert to simple quality string (Best, High, Medium, Low)
   String toSimpleString() {
     switch (quality) {
       case DownloadQuality.best:
         return 'Best';
+      case DownloadQuality.high:
+        return 'High';
       case DownloadQuality.medium:
         return 'Medium';
       case DownloadQuality.low:
         return 'Low';
-      case DownloadQuality.p1080:
+      case DownloadQuality.p2160:
+      case DownloadQuality.p1440:
         return 'Best'; // Fallback for expert qualities
+      case DownloadQuality.p1080:
+        return 'High';
       case DownloadQuality.p720:
         return 'Medium';
       case DownloadQuality.p480:
@@ -31,9 +40,13 @@ class QualitySettings {
     }
   }
 
-  // Convert to expert quality string (1080p, 720p, 480p)
+  // Convert to expert quality string (2160p, 1440p, 1080p, 720p, 480p)
   String toExpertString() {
     switch (quality) {
+      case DownloadQuality.p2160:
+        return '2160p';
+      case DownloadQuality.p1440:
+        return '1440p';
       case DownloadQuality.p1080:
         return '1080p';
       case DownloadQuality.p720:
@@ -41,7 +54,9 @@ class QualitySettings {
       case DownloadQuality.p480:
         return '480p';
       case DownloadQuality.best:
-        return '1080p'; // Fallback for simple qualities
+        return '2160p'; // Fallback for simple qualities
+      case DownloadQuality.high:
+        return '1080p';
       case DownloadQuality.medium:
         return '720p';
       case DownloadQuality.low:

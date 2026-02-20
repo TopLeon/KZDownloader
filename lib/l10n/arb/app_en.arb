@@ -21,7 +21,8 @@
     "btnGoSettings": "Go to Settings",
     "settingsTitle": "Settings",
     "downloadPath": "Download Path",
-    "defaultFormat": "Default Format",
+    "defaultFormat": "Default Video Format",
+    "defaultAudioFormat": "Default Audio Format",
     "defaultQuality": "Default Quality",
     "language": "Language",
     "chatTitle": "Chat to Download",
@@ -30,6 +31,8 @@
     "aiMagicHint": "Ask AI (e.g., 'Best quality audio only')...",
     "videoOptions": "Video Options",
     "qualityBest": "Best",
+    "qualityHigh": "High",
+    "qualityMedium": "Medium",
     "qualityLow": "Low",
     "actionDownload": "Download",
     "actionSummarize": "Summarize",
@@ -83,7 +86,7 @@
     "providerProDesc": "Multi-thread, Resume",
     "selectProvider": "Select Provider",
     "optionVideo": "Video",
-    "optionAudio": "Audio",
+    "optionAudio": "Music",
     "unknownError": "Unknown error",
     "analyzing": "Analyzing...",
     "downloadedWith": "Downloaded with {provider} in {time}",
@@ -259,6 +262,8 @@
     "settingsAISubtitle": "Automatically create summaries and smart answers for your downloads",
     "settingsAppearance": "Appearance",
     "settingsAppearanceSubtitle": "Choose an interface theme",
+    "summaryAnimations": "Summary Animations",
+    "summaryAnimationsSubtitle": "Enable animated text for summaries",
     "settingsDataStorage": "Data & Storage",
     "settingsGeneral": "General",
     "settingsGeneralSubtitle": "Manage your general preferences",
@@ -273,7 +278,7 @@
     "clearDownloadHistory": "Clear Download History",
     "clearDownloadHistorySubtitle": "Remove all finished downloads from the list",
     "versionInfo": "Version 1.0.0 • Build 2026.2",
-    "copyright": "© 2026 KZDownloader. Open Source Project.",
+    "copyright": "© 2026 KZDownloader by Le0nZ (github.com/topleon)",
     "selectLanguageTitle": "Select Language",
     "selectThemeTitle": "Select Theme",
     "themeSystem": "System Default",
@@ -482,5 +487,44 @@
     "seconds": "seconds",
     "millisecond": "ms",
     "milliseconds": "ms",
-    "and": "and"
+    "and": "and",
+    "concurrentDownloadsGlobal": "Concurrent Downloads (Global)",
+    "concurrentDownloadsGlobalDesc": "Maximum number of files downloaded simultaneously",
+    "checksumLabel": "Checksum (optional)",
+    "checksumHint": "If you want paste MD5 or SHA256 hash...",
+    "checksumAlgorithm": "Algorithm",
+    "checksumMatch": "Checksum verified",
+    "checksumMismatch": "Checksum mismatch",
+    "checksumVerifying": "Verifying checksum...",
+    "checksumError": "Checksum error",
+    "linkExpired": "Link expired (403)",
+    "linkExpiredMessage": "The download link has expired. Please provide a new URL to resume.",
+    "updateUrl": "Update URL",
+    "updateUrlTitle": "Update Download URL",
+    "updateUrlContent": "The download link has expired. Paste a new URL to resume the download from where it left off.",
+    "updateUrlHint": "Paste new URL...",
+    "diskSpaceFree": "{space} free",
+    "@diskSpaceFree": {
+        "placeholders": {
+            "space": {
+                "type": "String"
+            }
+        }
+    },
+    "insufficientDiskSpace": "Insufficient disk space. {available} available, {required} required.",
+    "@insufficientDiskSpace": {
+        "placeholders": {
+            "available": {
+                "type": "String"
+            },
+            "required": {
+                "type": "String"
+            }
+        }
+    },
+    "cancelDownload": "Cancel",
+    "cancelDownloadTooltip": "Cancel Download",
+    "queued": "Queued",
+    "diskSpace": "Disk Space",
+    "insufficientDiskSpace": "Insufficient disk space"
 }

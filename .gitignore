@@ -19,6 +19,10 @@ macos/Runner/Configs/AppInfo.xcconfig
 
 # personal
 new_screenshots/
+RACE_CONDITION_FIXES.md
+
+# generated
+rust_builder/
 
 # IntelliJ related
 *.iml

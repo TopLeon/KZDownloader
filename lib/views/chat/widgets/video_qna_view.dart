@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_streaming_text_markdown/flutter_streaming_text_markdown.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/core/download/providers/download_provider.dart';
+import 'package:kzdownloader/core/services/settings_service.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
 import 'package:kzdownloader/models/download_task.dart';
 import 'package:kzdownloader/views/chat/providers/video_chat_provider.dart';
@@ -23,15 +26,26 @@ class _VideoQnAViewState extends ConsumerState<VideoQnAView> {
   final ScrollController _chatScrollController = ScrollController();
   late bool _isSummaryMode;
   bool _isCopied = false;
+  bool _summaryAnimationsEnabled = true;
   final TextEditingController _controller = TextEditingController();
 
   @override
   void initState() {
     _isSummaryMode = !widget.startWithChat;
     super.initState();
+    _loadAnimationSettings();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(videoChatProvider.notifier).selectVideo(widget.task);
     });
+  }
+
+  Future<void> _loadAnimationSettings() async {
+    final enabled = await SettingsService().getSummaryAnimationsEnabled();
+    if (mounted) {
+      setState(() {
+        _summaryAnimationsEnabled = enabled;
+      });
+    }
   }
 
   Future<void> _copyToClipboard(DownloadTask task) async {
@@ -149,7 +163,7 @@ class _VideoQnAViewState extends ConsumerState<VideoQnAView> {
                     children: [
                       Expanded(
                         child: Container(
-                          padding: EdgeInsets.zero,
+                          height: 42,
                           decoration: BoxDecoration(
                             color: Theme.of(context).scaffoldBackgroundColor,
                             borderRadius: BorderRadius.circular(30),
@@ -165,10 +179,10 @@ class _VideoQnAViewState extends ConsumerState<VideoQnAView> {
                                 color: Theme.of(context)
                                     .colorScheme
                                     .shadow
-                                    .withOpacity(0.1),
-                                blurRadius: 2,
-                                offset: const Offset(0, 1),
-                              ),
+                                    .withOpacity(0.05),
+                                blurRadius: 20,
+                                offset: const Offset(0, 2),
+                              )
                             ],
                           ),
                           child: TextField(
@@ -180,12 +194,12 @@ class _VideoQnAViewState extends ConsumerState<VideoQnAView> {
                                 color: Theme.of(context)
                                     .colorScheme
                                     .onSurfaceVariant
-                                    .withOpacity(0.5),
+                                    .withOpacity(0.9),
                               ),
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
-                                vertical: 14,
+                                vertical: 16,
                               ),
                             ),
                             onSubmitted: _sendMessage,
@@ -236,44 +250,78 @@ class _VideoQnAViewState extends ConsumerState<VideoQnAView> {
                           Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: Theme.of(context).colorScheme.primary,
-                                fontSize: 18,
+                                fontSize: 20,
                               ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                MarkdownBody(
-                  data: task.summary ?? l10n.noSummaryAvailable,
-                  selectable: true,
-                  styleSheet:
-                      MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                    p: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(fontSize: 14),
-                    h1: Theme.of(context).textTheme.headlineMedium,
-                    h2: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                    code: TextStyle(
-                      backgroundColor:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
-                      fontFamily: 'monospace',
-                    ),
-                    blockquoteDecoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border(
-                          left: BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 4)),
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 16),
+                _summaryAnimationsEnabled
+                    ? StreamingTextMarkdown.chatGPT(
+                        text: task.summary ?? l10n.noSummaryAvailable,
+                        padding: EdgeInsets.zero,
+                      )
+                    : MarkdownBody(
+                        data: task.summary ?? l10n.noSummaryAvailable,
+                        selectable: true,
+                        styleSheet:
+                            MarkdownStyleSheet.fromTheme(Theme.of(context))
+                                .copyWith(
+                          p: GoogleFonts.montserrat(
+                            fontSize: 15,
+                            color: Theme.of(context).colorScheme.onSurface,
+                            height: 1.4,
+                            letterSpacing: 0.2,
+                          ),
+                          h1: Theme.of(context)
+                              .textTheme
+                              .headlineMedium!
+                              .copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontSize: 18,
+                                height: 1.4,
+                              ),
+                          h2: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: Theme.of(context).colorScheme.onSurface,
+                                height: 1.4,
+                              ),
+                          code: TextStyle(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            fontFamily: 'monospace',
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: 14,
+                            height: 1.5,
+                          ),
+                          codeblockDecoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          codeblockPadding: const EdgeInsets.all(12),
+                          blockquoteDecoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border(
+                                left: BorderSide(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    width: 4)),
+                          ),
+                          blockquotePadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                        ),
+                      ),
                 const SizedBox(height: 80),
               ]),
           Positioned(
@@ -420,7 +468,7 @@ class _MessageBubble extends StatelessWidget {
         alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
             margin: const EdgeInsets.symmetric(vertical: 6),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width * 0.8),
             decoration: BoxDecoration(
@@ -447,14 +495,57 @@ class _MessageBubble extends StatelessWidget {
               selectable: true,
               styleSheet:
                   MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                p: TextStyle(
-                    color:
-                        isUser ? colorScheme.onPrimary : colorScheme.onSurface,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3),
+                p: GoogleFonts.montserrat(
+                  fontSize: 15,
+                  color: isUser ? colorScheme.onPrimary : colorScheme.onSurface,
+                  height: 1.4,
+                  letterSpacing: 0.2,
+                ),
+                h1: Theme.of(context).textTheme.headlineMedium!.copyWith(
+                      color: isUser
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurface,
+                      fontSize: 18,
+                      height: 1.4,
+                    ),
+                h2: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: isUser
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurface,
+                      height: 1.4,
+                    ),
                 code: TextStyle(
-                  backgroundColor: isUser ? Colors.black26 : Colors.black12,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
                   fontFamily: 'monospace',
+                  color: isUser ? colorScheme.onPrimary : colorScheme.onSurface,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+                codeblockDecoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                codeblockPadding: const EdgeInsets.all(12),
+                blockquoteDecoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border(
+                      left: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 4)),
+                ),
+                blockquotePadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
                 ),
               ),
             )));

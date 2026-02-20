@@ -1,5 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:kzdownloader/core/download/providers/summary_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -147,22 +148,34 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
     final colorScheme = theme.colorScheme;
     final l10n = AppLocalizations.of(context)!;
 
+    // Watch the download list to get real-time updates
+    final downloadListAsync = ref.watch(downloadListProvider);
+
+    // Get the updated task from the provider and update local state
+    task = downloadListAsync.maybeWhen(
+      data: (tasks) => tasks.firstWhere(
+        (t) => t.id == task.id,
+        orElse: () => task,
+      ),
+      orElse: () => task,
+    );
+
     final borderColor = Theme.of(context).colorScheme.primary.withOpacity(0.15);
     final primaryColor = colorScheme.primary;
 
     final bool fileExists =
         task.filePath != null && File(task.filePath!).existsSync();
-    final bool isCompleted = task.status == 'completed';
+    final bool isCompleted = task.downloadStatus.isSuccess;
     final bool hasSummary = task.summary != null && task.summary!.isNotEmpty;
     bool isYt = false;
-    if (task.provider == 'yt-dlp') {
-      isYt = true;
-    } else {
-      isYt = task.url.contains('youtube') || task.url.contains('youtu.be');
-    }
+    isYt = task.url.contains('youtube') || task.url.contains('youtu.be');
+
+    // debugPrint(task.filePath.toString());
 
     return Container(
-      width: MediaQuery.of(context).size.width * 0.35,
+      width: MediaQuery.of(context).size.width * 0.35 < 600
+          ? MediaQuery.of(context).size.width * 0.35
+          : 600,
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border(left: BorderSide(color: borderColor, width: 1)),
@@ -185,19 +198,21 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 const SizedBox(height: 10),
                 Divider(color: borderColor),
                 const SizedBox(height: 10),
-                if (!isYt) ...[
+                if (!isYt && task.provider != 'yt-dlp') ...[
                   _buildInfoHeader(context, isDark),
                   const SizedBox(height: 12),
                   _buildInfoCard(context, theme, isDark, fileExists),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Divider(color: borderColor),
                   const SizedBox(height: 2),
+                ],
+                if (!isYt) ...[
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: Text(
                         l10n.aiFeatureYouTubeOnly,
-                        style: TextStyle(color: theme.hintColor, fontSize: 12),
+                        style: TextStyle(color: theme.hintColor, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -259,57 +274,65 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
 
     // Standard video/thumbnail display
     return LayoutBuilder(builder: (context, constraints) {
-      return AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: isDark
-                ? Colors.white.withOpacity(0.1)
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Stack(
-              children: [
-                (task.thumbnail != null)
-                    ? Image.network(
-                        task.thumbnail!,
-                        fit: BoxFit.fitWidth,
-                        width: constraints.maxWidth,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildPlaceholder(Theme.of(context).colorScheme),
-                      )
-                    : _buildPlaceholder(Theme.of(context).colorScheme),
-                if (task.thumbnail == null) ...[
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.3),
-                          Colors.black.withOpacity(0.6),
-                        ],
+      return SizedBox(
+        width: constraints.maxWidth,
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: isDark
+                  ? Colors.white.withOpacity(0.1)
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  (task.thumbnail != null)
+                      ? Transform.scale(
+                          scale: 1.01,
+                          child: CachedNetworkImage(
+                            imageUrl: task.thumbnail!,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.medium,
+                            errorWidget: (context, url, error) =>
+                                _buildPlaceholder(
+                                    Theme.of(context).colorScheme),
+                          ),
+                        )
+                      : _buildPlaceholder(Theme.of(context).colorScheme),
+                  if (task.thumbnail == null) ...[
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.3),
+                            Colors.black.withOpacity(0.6),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const Center(
-                    child: FIcon(
-                      RI.RiVideoOnLine,
-                      color: Colors.white,
-                      size: 32,
+                    const Center(
+                      child: FIcon(
+                        RI.RiVideoOnLine,
+                        color: Colors.white,
+                        size: 32,
+                      ),
                     ),
-                  ),
-                ]
-              ],
+                  ]
+                ],
+              ),
             ),
           ),
         ),
@@ -319,14 +342,16 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
 
   Widget _buildPlaceholder(ColorScheme colorScheme) {
     return Container(
-      color: Theme.of(context).brightness == Brightness.dark
-          ? Colors.white.withOpacity(0.1)
-          : colorScheme.surfaceContainerHighest,
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Colors.white.withOpacity(0.1)
+            : colorScheme.tertiary,
+      ),
       child: Center(
-        child: FIcon(
-          RI.RiVideoOnLine,
+        child: Icon(
+          Icons.image_not_supported,
           color: colorScheme.onSurfaceVariant.withOpacity(0.3),
-          size: 32,
+          size: 80,
         ),
       ),
     );
@@ -340,16 +365,17 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
         SelectableText(
           task.title ?? AppLocalizations.of(context)!.untitled,
           style: GoogleFonts.montserrat(
-              fontSize: 18, fontWeight: FontWeight.w600, height: 1.3),
+              fontSize: 20, fontWeight: FontWeight.w600, height: 1.2),
         ),
+        const SizedBox(height: 2),
         if (task.channelName != null)
           Padding(
             padding: const EdgeInsets.only(top: 2.0),
             child: Text(
               task.channelName!,
               style: GoogleFonts.montserrat(
-                  fontSize: 14,
-                  color: primaryColor,
+                  fontSize: 15,
+                  color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w500),
             ),
           ),
@@ -357,6 +383,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildMetadataChips(BuildContext context, ThemeData theme, bool isDark,
       bool fileExists, bool hasSummary) {
     var l10n = AppLocalizations.of(context)!;
@@ -371,14 +398,15 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 .format(task.createdAt),
             theme,
             isDark),
+        if (task.summary != null)
+          _buildMetaInternal(RI.RiBardLine, l10n.summarized, theme, isDark),
         if (task.totalSize != null) ...[
           if (File(task.filePath ?? '').existsSync()) ...[
             _buildMetaInternal(
                 RI.RiDownloadLine, l10n.downloaded, theme, isDark),
-          ] else ...[
+          ] else if (task.downloadStatus.isSuccess) ...[
             _buildMetaInternal(RI.RiDeleteBinLine, l10n.deleted, theme, isDark),
           ],
-          _buildMetaInternal(RI.RiSdCardLine, task.totalSize!, theme, isDark),
         ]
       ],
     );
@@ -389,9 +417,13 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        FIcon(icon, size: 14, color: theme.hintColor),
+        FIcon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),
-        Text(text, style: TextStyle(fontSize: 12, color: theme.hintColor)),
+        Text(text,
+            style: GoogleFonts.montserrat(
+              fontSize: 13,
+              color: theme.colorScheme.onSurfaceVariant,
+            )),
       ],
     );
   }
@@ -544,7 +576,6 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 : task.processTime ?? l10n.unknown,
             theme.colorScheme.primary,
           ),
-          const SizedBox(height: 12),
           if (task.downloadSpeed != null) ...[
             const SizedBox(height: 12),
             _buildInfoRow(
@@ -555,6 +586,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
               theme.colorScheme.primary,
             ),
           ],
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -581,10 +613,10 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context).hintColor,
-                  fontWeight: FontWeight.w500,
+                style: GoogleFonts.montserrat(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 2),
@@ -592,7 +624,6 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 value,
                 style: GoogleFonts.montserrat(
                   fontSize: 13,
-                  fontWeight: FontWeight.w600,
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),
@@ -661,7 +692,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
           ),
           child: Text(l10n.beta,
               style:
-                  const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
         )
       ],
     );
@@ -670,7 +701,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
   Widget _buildSummaryCard(
       BuildContext context, WidgetRef ref, bool isDark, bool hasSummary) {
     final theme = Theme.of(context);
-    final isGenerating = task.status == 'summarizing';
+    final isGenerating = task.summaryStatus.isActive;
     final l10n = AppLocalizations.of(context)!;
 
     return Container(
@@ -691,7 +722,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
               Text(
                 l10n.executiveSummary,
                 style: GoogleFonts.montserrat(
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: Theme.of(context).colorScheme.primary),
               ),
@@ -722,7 +753,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                   Text(
                     l10n.statusCopied,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: Colors.green,
                       fontWeight: FontWeight.w500,
                     ),
@@ -737,8 +768,12 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
             Text(
               task.summary ?? l10n.noSummaryAvailable,
               maxLines: 3,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.montserrat(
-                  fontSize: 13, color: theme.colorScheme.primary),
+                  fontSize: 14,
+                  color: theme.colorScheme.primary,
+                  letterSpacing: 0.2,
+                  height: 1.4),
             ),
           ] else if (isGenerating)
             Row(
@@ -748,13 +783,13 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                     height: 14,
                     child: CircularProgressIndicator(strokeWidth: 2)),
                 const SizedBox(width: 8),
-                Text(l10n.generating, style: const TextStyle(fontSize: 13)),
+                Text(l10n.generating, style: const TextStyle(fontSize: 14)),
               ],
             )
           else
             Text(
               l10n.noSummaryAvailable,
-              style: TextStyle(fontSize: 13, color: theme.hintColor),
+              style: TextStyle(fontSize: 14, color: theme.hintColor),
             ),
           if (!hasSummary && !isGenerating)
             Padding(
@@ -764,7 +799,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 child: InkWell(
                     onTap: () {
                       ref
-                          .read(downloadListProvider.notifier)
+                          .read(summaryManagerProvider.notifier)
                           .generateSummary(task);
                     },
                     child: AiButton(
@@ -779,7 +814,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 onTap: hasSummary ? onExpandSummary : null,
                 child: Text(l10n.showAll,
                     style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         color: theme.colorScheme.primary,
                         decoration: TextDecoration.underline)),
               ),
@@ -814,7 +849,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: color.withOpacity(0.15), width: 1),
               ),
-              child: Icon(Icons.chat_bubble_outline, size: 18, color: color),
+              child: Icon(Icons.chat_bubble_outline, size: 16, color: color),
             ),
             const SizedBox(width: 12),
             Column(
@@ -823,7 +858,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 Text(
                   l10n.chatWithVideo,
                   style: GoogleFonts.montserrat(
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: enabled
                           ? theme.textTheme.bodyLarge?.color
@@ -832,7 +867,7 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 if (!enabled)
                   Text(l10n.generateSummaryFirst,
                       style:
-                          TextStyle(fontSize: 10, color: theme.disabledColor)),
+                          TextStyle(fontSize: 13, color: theme.disabledColor)),
               ],
             ),
             const Spacer(),
@@ -879,7 +914,9 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
           if (task.summary != null)
             TextButton.icon(
               onPressed: () {
-                ref.read(downloadListProvider.notifier).regenerateSummary(task);
+                ref
+                    .read(summaryManagerProvider.notifier)
+                    .regenerateSummary(task);
               },
               icon: const FIcon(
                 RI.RiRefreshLine,

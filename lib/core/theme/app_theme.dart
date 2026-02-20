@@ -34,7 +34,7 @@ class AppTheme {
         fontWeight: FontWeight.w600,
       ),
       titleLarge:
-          GoogleFonts.montserrat(fontSize: 22, fontWeight: FontWeight.w600),
+          GoogleFonts.montserrat(fontSize: 20, fontWeight: FontWeight.w600),
       titleMedium: GoogleFonts.montserrat(
         fontSize: 16,
         fontWeight: FontWeight.w600,
@@ -66,12 +66,12 @@ class AppTheme {
         letterSpacing: 0.1,
       ),
       labelMedium: GoogleFonts.montserrat(
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.5,
       ),
       labelSmall: GoogleFonts.montserrat(
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.5,
       ),
@@ -88,8 +88,7 @@ class AppTheme {
       onPrimary: const Color(0xFFFFFFFF),
       primaryContainer: const Color.fromARGB(255, 225, 225, 230),
       secondary: const Color.fromARGB(255, 246, 246, 247),
-      surface:
-          const Color.fromARGB(255, 238, 238, 238), 
+      surface: const Color.fromARGB(255, 238, 238, 238),
       surfaceContainerHighest: const Color(0xFFE4E4E7),
       onSurface: const Color(0xFF09090B),
       onSurfaceVariant: const Color(0xFF71717A),
@@ -138,8 +137,9 @@ class AppTheme {
         textStyle: GoogleFonts.montserrat(fontWeight: FontWeight.w600),
       ),
     ),
-    snackBarTheme:
-        SnackBarThemeData(contentTextStyle: GoogleFonts.montserrat()),
+    snackBarTheme: SnackBarThemeData(
+        contentTextStyle: GoogleFonts.montserrat(),
+        backgroundColor: const Color(0xFF09090B)),
     listTileTheme: ListTileThemeData(
       titleTextStyle: GoogleFonts.montserrat(
         fontSize: 16,
@@ -169,7 +169,7 @@ class AppTheme {
       onSurfaceVariant: const Color(0xFFA1A1AA),
       outline: const Color.fromRGBO(51, 50, 63, 1),
       tertiary: const Color.fromRGBO(36, 36, 46, 1),
-      error: const Color(0xFFCF6679),
+      error: const Color.fromARGB(255, 221, 70, 70),
     ),
     cardTheme: const CardThemeData(
       elevation: 0,
@@ -214,8 +214,9 @@ class AppTheme {
         textStyle: GoogleFonts.montserrat(fontWeight: FontWeight.w600),
       ),
     ),
-    snackBarTheme:
-        SnackBarThemeData(contentTextStyle: GoogleFonts.montserrat()),
+    snackBarTheme: SnackBarThemeData(
+        contentTextStyle: GoogleFonts.montserrat(color: Colors.black),
+        backgroundColor: const Color.fromARGB(255, 241, 241, 241)),
     listTileTheme: ListTileThemeData(
       titleTextStyle: GoogleFonts.montserrat(
         fontSize: 16,

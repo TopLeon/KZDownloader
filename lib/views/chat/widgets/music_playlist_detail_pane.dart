@@ -1,4 +1,8 @@
+import 'dart:io';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/models/playlist.dart';
@@ -56,7 +60,7 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
     // Filter only completed music tracks
     final musicTracks = allTasks.where((t) {
       return t.category == TaskCategory.music &&
-          t.status == 'completed' &&
+          t.downloadStatus.isSuccess &&
           t.filePath != null;
     }).toList();
 
@@ -123,7 +127,9 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
     final playlistTracks = currentPlaylist.tasks.toList();
 
     return Container(
-      width: MediaQuery.of(context).size.width * 0.3,
+      width: MediaQuery.of(context).size.width * 0.3 < 550
+          ? MediaQuery.of(context).size.width * 0.3
+          : 550,
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border(
@@ -150,7 +156,7 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
           // Scrollable content
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -172,9 +178,9 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: widget.playlist.coverImage != null
-                            ? Image.network(
-                                widget.playlist.coverImage!,
+                        child: currentPlaylist.coverImage != null
+                            ? Image.file(
+                                File(currentPlaylist.coverImage!),
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
                                     _buildPlaceholderCover(colorScheme),
@@ -189,7 +195,7 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                   Text(
                     currentPlaylist.name,
                     style: GoogleFonts.montserrat(
-                      fontSize: 24,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
@@ -201,9 +207,9 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                     children: [
                       // Info: track count and creation date
                       Text(
-                        '${playlistTracks.length} ${playlistTracks.length == 1 ? l10n.track : l10n.tracks} ',
+                        '${playlistTracks.length} ${playlistTracks.length == 1 ? l10n.track : l10n.tracks} - ',
                         style: GoogleFonts.montserrat(
-                          fontSize: 12,
+                          fontSize: 13,
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -212,7 +218,7 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                                 Localizations.localeOf(context).toString())
                             .format(currentPlaylist.createdAt)),
                         style: GoogleFonts.montserrat(
-                          fontSize: 12,
+                          fontSize: 13,
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -239,7 +245,7 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                     Divider(
                       color: colorScheme.outlineVariant.withOpacity(0.5),
                     ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // Track list
                   if (playlistTracks.isEmpty)
@@ -325,14 +331,12 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
     ColorScheme colorScheme,
     WidgetRef ref,
   ) {
-    bool isDark = colorScheme.brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.tertiary,
+        color: colorScheme.tertiary,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.15)),
+        border: Border.all(color: colorScheme.primary.withOpacity(0.15)),
       ),
       child: InkWell(
         onTap: () {
@@ -347,7 +351,7 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                 );
           }
         },
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -376,26 +380,24 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
               // Thumbnail
               if (track.thumbnail != null)
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.network(
-                    track.thumbnail!,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      width: 40,
-                      height: 40,
-                      color: isDark
-                          ? Colors.white.withOpacity(0.1)
-                          : colorScheme.surfaceContainerHighest,
-                      child: FIcon(
-                        RI.RiMusicLine,
-                        color: colorScheme.onSurfaceVariant.withOpacity(0.5),
-                        size: 22,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Transform.scale(
+                                  scale: 1.35,
+                      child: CachedNetworkImage(
+                        imageUrl: track.thumbnail!,
+                        fit: BoxFit.cover,
+                        height: 35,
+                        width: 35,
+                        filterQuality: FilterQuality.medium,
+                        errorWidget: (context, url, error) => Container(
+                          color: Theme.brightnessOf(context) == Brightness.dark
+                              ? Colors.grey[800]
+                              : Colors.grey[500],
+                          child: const Icon(Icons.music_note,
+                              size: 20, color: Colors.white54),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
+                    )),
               const SizedBox(width: 12),
 
               // Track info
@@ -405,9 +407,9 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                   children: [
                     Text(
                       track.title ?? AppLocalizations.of(context)!.unknownTrack,
-                      style: GoogleFonts.notoSans(
+                      style: GoogleFonts.montserrat(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -415,8 +417,8 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                     if (track.channelName != null)
                       Text(
                         track.channelName!,
-                        style: GoogleFonts.notoSans(
-                          fontSize: 11,
+                        style: GoogleFonts.montserrat(
+                          fontSize: 13,
                           color: colorScheme.onSurfaceVariant,
                         ),
                         maxLines: 1,
@@ -481,279 +483,317 @@ class _AddMusicDialogState extends State<_AddMusicDialog> {
     final l10n = AppLocalizations.of(context)!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Dialog(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Container(
-        width: 500,
-        height: 600,
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            // Header
-            Row(
-              children: [
-                FIcon(
-                  RI.RiPlayListAddLine,
-                  color: colorScheme.primary,
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  l10n.addMusic,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.1)
+                    : Colors.black.withOpacity(0.05),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 32,
+                  offset: const Offset(0, 16),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-
-            // Search bar
-            TextField(
-              onChanged: (value) => setState(() => _searchQuery = value),
-              decoration: InputDecoration(
-                hintText: l10n.searchTracksPlaceholder,
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: isDark
-                    ? Colors.white.withOpacity(0.05)
-                    : colorScheme.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Selected count
-            if (_selectedTrackIds.isNotEmpty)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                // Header
+                Row(
                   children: [
                     FIcon(
-                      RI.RiCheckLine,
+                      RI.RiPlayListAddLine,
                       color: colorScheme.primary,
-                      size: 16,
+                      size: 24,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     Text(
-                      '${_selectedTrackIds.length} ${_selectedTrackIds.length == 1 ? l10n.selectedTrackSingular : l10n.selectedTracksPlural}',
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                      l10n.addMusic,
+                      style: GoogleFonts.montserrat(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Search bar
+                TextField(
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  decoration: InputDecoration(
+                    hintText: l10n.searchTracksPlaceholder,
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: isDark
+                        ? Colors.white.withOpacity(0.05)
+                        : colorScheme.surfaceContainerHighest,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Selected count
+                if (_selectedTrackIds.isNotEmpty)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FIcon(
+                          RI.RiCheckLine,
+                          color: colorScheme.primary,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_selectedTrackIds.length} ${_selectedTrackIds.length == 1 ? l10n.selectedTrackSingular : l10n.selectedTracksPlural}',
+                          style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
+
+                // Track list
+                Expanded(
+                  child: _filteredTracks.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              FIcon(
+                                RI.RiSearchLine,
+                                size: 48,
+                                color: colorScheme.onSurfaceVariant
+                                    .withOpacity(0.3),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                l10n.noTracksFound,
+                                style: GoogleFonts.notoSans(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: _filteredTracks.length,
+                          itemBuilder: (context, index) {
+                            final track = _filteredTracks[index];
+                            final isSelected =
+                                _selectedTrackIds.contains(track.id);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? colorScheme.primary.withOpacity(0.1)
+                                    : (isDark
+                                        ? Colors.white.withOpacity(0.05)
+                                        : colorScheme.surfaceContainerHighest),
+                                borderRadius: BorderRadius.circular(12),
+                                border: isSelected
+                                    ? Border.all(
+                                        color: colorScheme.primary,
+                                        width: 2,
+                                      )
+                                    : null,
+                              ),
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedTrackIds.remove(track.id);
+                                    } else {
+                                      _selectedTrackIds.add(track.id);
+                                    }
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
+                                    children: [
+                                      // Checkbox
+                                      Container(
+                                        width: 24,
+                                        height: 24,
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? colorScheme.primary
+                                              : Colors.transparent,
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? colorScheme.primary
+                                                : colorScheme.primary
+                                                    .withOpacity(0.15),
+                                            width: 2,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: isSelected
+                                            ? Icon(
+                                                Icons.check,
+                                                size: 16,
+                                                color: colorScheme.onPrimary,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 12),
+
+                                      // Thumbnail
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: track.thumbnail != null
+                                            ? CachedNetworkImage(
+                                                imageUrl: track.thumbnail!,
+                                                fit: BoxFit.cover,
+                                                width: 40,
+                                                height: 40,
+                                                filterQuality:
+                                                    FilterQuality.medium,
+                                                errorWidget:
+                                                    (context, url, error) =>
+                                                        Container(
+                                                  color: Theme.brightnessOf(
+                                                              context) ==
+                                                          Brightness.dark
+                                                      ? Colors.grey[800]
+                                                      : Colors.grey[500],
+                                                  child: const Icon(
+                                                      Icons.music_note,
+                                                      size: 20,
+                                                      color: Colors.white54),
+                                                ),
+                                              )
+                                            : Container(
+                                                color: Theme.brightnessOf(
+                                                            context) ==
+                                                        Brightness.dark
+                                                    ? Colors.grey[800]
+                                                    : Colors.grey[500],
+                                                child: const Icon(
+                                                    Icons.music_note,
+                                                    size: 20,
+                                                    color: Colors.white54),
+                                              ),
+                                      ),
+                                      const SizedBox(width: 12),
+
+                                      // Track info
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              track.title ??
+                                                  AppLocalizations.of(context)!
+                                                      .unknownTrack,
+                                              style: GoogleFonts.notoSans(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: isSelected
+                                                    ? colorScheme.primary
+                                                    : colorScheme.onSurface,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            if (track.channelName != null)
+                                              Text(
+                                                track.channelName!,
+                                                style: GoogleFonts.notoSans(
+                                                  fontSize: 13,
+                                                  color: colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Action buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Annulla'),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      onPressed: _selectedTrackIds.isEmpty
+                          ? null
+                          : () {
+                              final selectedTracks = widget.availableTracks
+                                  .where(
+                                      (t) => _selectedTrackIds.contains(t.id))
+                                  .toList();
+                              widget.onAddTracks(selectedTracks);
+                              Navigator.pop(context);
+                            },
+                      style: ButtonStyle(
+                        shape: WidgetStateProperty.all(
+                          RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      ),
+                      child: Text(
+                        'Aggiungi (${_selectedTrackIds.length})',
                       ),
                     ),
                   ],
                 ),
-              ),
-            const SizedBox(height: 16),
-
-            // Track list
-            Expanded(
-              child: _filteredTracks.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          FIcon(
-                            RI.RiSearchLine,
-                            size: 48,
-                            color:
-                                colorScheme.onSurfaceVariant.withOpacity(0.3),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            l10n.noTracksFound,
-                            style: GoogleFonts.notoSans(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _filteredTracks.length,
-                      itemBuilder: (context, index) {
-                        final track = _filteredTracks[index];
-                        final isSelected = _selectedTrackIds.contains(track.id);
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? colorScheme.primary.withOpacity(0.1)
-                                : (isDark
-                                    ? Colors.white.withOpacity(0.05)
-                                    : colorScheme.surfaceContainerHighest),
-                            borderRadius: BorderRadius.circular(12),
-                            border: isSelected
-                                ? Border.all(
-                                    color: colorScheme.primary,
-                                    width: 2,
-                                  )
-                                : null,
-                          ),
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                if (isSelected) {
-                                  _selectedTrackIds.remove(track.id);
-                                } else {
-                                  _selectedTrackIds.add(track.id);
-                                }
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  // Checkbox
-                                  Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? colorScheme.primary
-                                          : Colors.transparent,
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? colorScheme.primary
-                                            : colorScheme.outline,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: isSelected
-                                        ? Icon(
-                                            Icons.check,
-                                            size: 16,
-                                            color: colorScheme.onPrimary,
-                                          )
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 12),
-
-                                  // Thumbnail
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: track.thumbnail != null
-                                        ? Image.network(
-                                            track.thumbnail!,
-                                            width: 40,
-                                            height: 40,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
-                                                _buildPlaceholderThumb(
-                                                    colorScheme),
-                                          )
-                                        : _buildPlaceholderThumb(colorScheme),
-                                  ),
-                                  const SizedBox(width: 12),
-
-                                  // Track info
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          track.title ??
-                                              AppLocalizations.of(context)!
-                                                  .unknownTrack,
-                                          style: GoogleFonts.notoSans(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: isSelected
-                                                ? colorScheme.primary
-                                                : colorScheme.onSurface,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        if (track.channelName != null)
-                                          Text(
-                                            track.channelName!,
-                                            style: GoogleFonts.notoSans(
-                                              fontSize: 11,
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Action buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Annulla'),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: _selectedTrackIds.isEmpty
-                      ? null
-                      : () {
-                          final selectedTracks = widget.availableTracks
-                              .where((t) => _selectedTrackIds.contains(t.id))
-                              .toList();
-                          widget.onAddTracks(selectedTracks);
-                          Navigator.pop(context);
-                        },
-                  child: Text(
-                    'Aggiungi (${_selectedTrackIds.length})',
-                  ),
-                ),
               ],
             ),
-          ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderThumb(ColorScheme colorScheme) {
-    return Container(
-      width: 40,
-      height: 40,
-      color: colorScheme.surfaceContainerHighest,
-      child: FIcon(
-        RI.RiMusicLine,
-        color: colorScheme.onSurfaceVariant.withOpacity(0.5),
-        size: 20,
       ),
     );
   }

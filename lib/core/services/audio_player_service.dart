@@ -117,7 +117,10 @@ class AudioPlayerService {
   AudioPlayerService();
 
   Future<void> setUrl(String filePath) async {
-    await player.setFilePath(filePath);
+    // Use a URI so special characters in the filename (e.g. double-quotes)
+    // are percent-encoded before being handed to MPV, which interprets
+    // raw quotes as string delimiters and fails to open the file.
+    await player.setAudioSource(AudioSource.uri(Uri.file(filePath)));
   }
 
   Future<void> play() async {

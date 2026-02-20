@@ -48,144 +48,166 @@ const DownloadTaskSchema = CollectionSchema(
       name: r'channelName',
       type: IsarType.string,
     ),
-    r'completedAt': PropertySchema(
+    r'checksumAlgorithm': PropertySchema(
       id: 6,
+      name: r'checksumAlgorithm',
+      type: IsarType.string,
+    ),
+    r'checksumResult': PropertySchema(
+      id: 7,
+      name: r'checksumResult',
+      type: IsarType.string,
+    ),
+    r'completedAt': PropertySchema(
+      id: 8,
       name: r'completedAt',
       type: IsarType.dateTime,
     ),
-    r'completedSteps': PropertySchema(
-      id: 7,
-      name: r'completedSteps',
+    r'completedStepsInternal': PropertySchema(
+      id: 9,
+      name: r'completedStepsInternal',
       type: IsarType.stringList,
     ),
     r'createdAt': PropertySchema(
-      id: 8,
+      id: 10,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'dirPath': PropertySchema(
-      id: 9,
+      id: 11,
       name: r'dirPath',
       type: IsarType.string,
     ),
     r'downloadSpeed': PropertySchema(
-      id: 10,
+      id: 12,
       name: r'downloadSpeed',
       type: IsarType.string,
     ),
+    r'downloadStatus': PropertySchema(
+      id: 13,
+      name: r'downloadStatus',
+      type: IsarType.byte,
+      enumMap: _DownloadTaskdownloadStatusEnumValueMap,
+    ),
     r'errorMessage': PropertySchema(
-      id: 11,
+      id: 14,
       name: r'errorMessage',
       type: IsarType.string,
     ),
     r'eta': PropertySchema(
-      id: 12,
+      id: 15,
       name: r'eta',
       type: IsarType.string,
     ),
+    r'expectedChecksum': PropertySchema(
+      id: 16,
+      name: r'expectedChecksum',
+      type: IsarType.string,
+    ),
     r'filePath': PropertySchema(
-      id: 13,
+      id: 17,
       name: r'filePath',
       type: IsarType.string,
     ),
     r'isPlaylistContainer': PropertySchema(
-      id: 14,
+      id: 18,
       name: r'isPlaylistContainer',
       type: IsarType.bool,
     ),
     r'playlistCompletedVideos': PropertySchema(
-      id: 15,
+      id: 19,
       name: r'playlistCompletedVideos',
       type: IsarType.long,
     ),
     r'playlistId': PropertySchema(
-      id: 16,
+      id: 20,
       name: r'playlistId',
       type: IsarType.string,
     ),
     r'playlistParentId': PropertySchema(
-      id: 17,
+      id: 21,
       name: r'playlistParentId',
       type: IsarType.long,
     ),
     r'playlistTotalVideos': PropertySchema(
-      id: 18,
+      id: 22,
       name: r'playlistTotalVideos',
       type: IsarType.long,
     ),
     r'processTime': PropertySchema(
-      id: 19,
+      id: 23,
       name: r'processTime',
       type: IsarType.string,
     ),
     r'progress': PropertySchema(
-      id: 20,
+      id: 24,
       name: r'progress',
       type: IsarType.double,
     ),
     r'provider': PropertySchema(
-      id: 21,
+      id: 25,
       name: r'provider',
       type: IsarType.string,
     ),
     r'qaHistory': PropertySchema(
-      id: 22,
+      id: 26,
       name: r'qaHistory',
       type: IsarType.objectList,
       target: r'QAItem',
     ),
     r'startedAt': PropertySchema(
-      id: 23,
+      id: 27,
       name: r'startedAt',
       type: IsarType.dateTime,
     ),
-    r'status': PropertySchema(
-      id: 24,
-      name: r'status',
-      type: IsarType.string,
-    ),
     r'stepDetailsJson': PropertySchema(
-      id: 25,
+      id: 28,
       name: r'stepDetailsJson',
       type: IsarType.string,
     ),
     r'summary': PropertySchema(
-      id: 26,
+      id: 29,
       name: r'summary',
       type: IsarType.string,
     ),
+    r'summaryStatus': PropertySchema(
+      id: 30,
+      name: r'summaryStatus',
+      type: IsarType.byte,
+      enumMap: _DownloadTasksummaryStatusEnumValueMap,
+    ),
     r'summaryType': PropertySchema(
-      id: 27,
+      id: 31,
       name: r'summaryType',
       type: IsarType.string,
     ),
     r'thumbnail': PropertySchema(
-      id: 28,
+      id: 32,
       name: r'thumbnail',
       type: IsarType.string,
     ),
     r'title': PropertySchema(
-      id: 29,
+      id: 33,
       name: r'title',
       type: IsarType.string,
     ),
     r'totalSize': PropertySchema(
-      id: 30,
+      id: 34,
       name: r'totalSize',
       type: IsarType.string,
     ),
     r'totalWorkers': PropertySchema(
-      id: 31,
+      id: 35,
       name: r'totalWorkers',
       type: IsarType.long,
     ),
     r'url': PropertySchema(
-      id: 32,
+      id: 36,
       name: r'url',
       type: IsarType.string,
     ),
     r'workersProgressJson': PropertySchema(
-      id: 33,
+      id: 37,
       name: r'workersProgressJson',
       type: IsarType.string,
     )
@@ -234,10 +256,22 @@ int _downloadTaskEstimateSize(
       bytesCount += 3 + value.length * 3;
     }
   }
-  bytesCount += 3 + object.completedSteps.length * 3;
   {
-    for (var i = 0; i < object.completedSteps.length; i++) {
-      final value = object.completedSteps[i];
+    final value = object.checksumAlgorithm;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.checksumResult;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  bytesCount += 3 + object.completedStepsInternal.length * 3;
+  {
+    for (var i = 0; i < object.completedStepsInternal.length; i++) {
+      final value = object.completedStepsInternal[i];
       bytesCount += value.length * 3;
     }
   }
@@ -261,6 +295,12 @@ int _downloadTaskEstimateSize(
   }
   {
     final value = object.eta;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.expectedChecksum;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -297,7 +337,6 @@ int _downloadTaskEstimateSize(
       }
     }
   }
-  bytesCount += 3 + object.status.length * 3;
   {
     final value = object.stepDetailsJson;
     if (value != null) {
@@ -356,39 +395,43 @@ void _downloadTaskSerialize(
   writer.writeByte(offsets[3], object.category.index);
   writer.writeString(offsets[4], object.channelId);
   writer.writeString(offsets[5], object.channelName);
-  writer.writeDateTime(offsets[6], object.completedAt);
-  writer.writeStringList(offsets[7], object.completedSteps);
-  writer.writeDateTime(offsets[8], object.createdAt);
-  writer.writeString(offsets[9], object.dirPath);
-  writer.writeString(offsets[10], object.downloadSpeed);
-  writer.writeString(offsets[11], object.errorMessage);
-  writer.writeString(offsets[12], object.eta);
-  writer.writeString(offsets[13], object.filePath);
-  writer.writeBool(offsets[14], object.isPlaylistContainer);
-  writer.writeLong(offsets[15], object.playlistCompletedVideos);
-  writer.writeString(offsets[16], object.playlistId);
-  writer.writeLong(offsets[17], object.playlistParentId);
-  writer.writeLong(offsets[18], object.playlistTotalVideos);
-  writer.writeString(offsets[19], object.processTime);
-  writer.writeDouble(offsets[20], object.progress);
-  writer.writeString(offsets[21], object.provider);
+  writer.writeString(offsets[6], object.checksumAlgorithm);
+  writer.writeString(offsets[7], object.checksumResult);
+  writer.writeDateTime(offsets[8], object.completedAt);
+  writer.writeStringList(offsets[9], object.completedStepsInternal);
+  writer.writeDateTime(offsets[10], object.createdAt);
+  writer.writeString(offsets[11], object.dirPath);
+  writer.writeString(offsets[12], object.downloadSpeed);
+  writer.writeByte(offsets[13], object.downloadStatus.index);
+  writer.writeString(offsets[14], object.errorMessage);
+  writer.writeString(offsets[15], object.eta);
+  writer.writeString(offsets[16], object.expectedChecksum);
+  writer.writeString(offsets[17], object.filePath);
+  writer.writeBool(offsets[18], object.isPlaylistContainer);
+  writer.writeLong(offsets[19], object.playlistCompletedVideos);
+  writer.writeString(offsets[20], object.playlistId);
+  writer.writeLong(offsets[21], object.playlistParentId);
+  writer.writeLong(offsets[22], object.playlistTotalVideos);
+  writer.writeString(offsets[23], object.processTime);
+  writer.writeDouble(offsets[24], object.progress);
+  writer.writeString(offsets[25], object.provider);
   writer.writeObjectList<QAItem>(
-    offsets[22],
+    offsets[26],
     allOffsets,
     QAItemSchema.serialize,
     object.qaHistory,
   );
-  writer.writeDateTime(offsets[23], object.startedAt);
-  writer.writeString(offsets[24], object.status);
-  writer.writeString(offsets[25], object.stepDetailsJson);
-  writer.writeString(offsets[26], object.summary);
-  writer.writeString(offsets[27], object.summaryType);
-  writer.writeString(offsets[28], object.thumbnail);
-  writer.writeString(offsets[29], object.title);
-  writer.writeString(offsets[30], object.totalSize);
-  writer.writeLong(offsets[31], object.totalWorkers);
-  writer.writeString(offsets[32], object.url);
-  writer.writeString(offsets[33], object.workersProgressJson);
+  writer.writeDateTime(offsets[27], object.startedAt);
+  writer.writeString(offsets[28], object.stepDetailsJson);
+  writer.writeString(offsets[29], object.summary);
+  writer.writeByte(offsets[30], object.summaryStatus.index);
+  writer.writeString(offsets[31], object.summaryType);
+  writer.writeString(offsets[32], object.thumbnail);
+  writer.writeString(offsets[33], object.title);
+  writer.writeString(offsets[34], object.totalSize);
+  writer.writeLong(offsets[35], object.totalWorkers);
+  writer.writeString(offsets[36], object.url);
+  writer.writeString(offsets[37], object.workersProgressJson);
 }
 
 DownloadTask _downloadTaskDeserialize(
@@ -406,40 +449,48 @@ DownloadTask _downloadTaskDeserialize(
           TaskCategory.video;
   object.channelId = reader.readStringOrNull(offsets[4]);
   object.channelName = reader.readStringOrNull(offsets[5]);
-  object.completedAt = reader.readDateTimeOrNull(offsets[6]);
-  object.completedSteps = reader.readStringList(offsets[7]) ?? [];
-  object.createdAt = reader.readDateTime(offsets[8]);
-  object.dirPath = reader.readStringOrNull(offsets[9]);
-  object.downloadSpeed = reader.readStringOrNull(offsets[10]);
-  object.errorMessage = reader.readStringOrNull(offsets[11]);
-  object.eta = reader.readStringOrNull(offsets[12]);
-  object.filePath = reader.readStringOrNull(offsets[13]);
+  object.checksumAlgorithm = reader.readStringOrNull(offsets[6]);
+  object.checksumResult = reader.readStringOrNull(offsets[7]);
+  object.completedAt = reader.readDateTimeOrNull(offsets[8]);
+  object.completedStepsInternal = reader.readStringList(offsets[9]) ?? [];
+  object.createdAt = reader.readDateTime(offsets[10]);
+  object.dirPath = reader.readStringOrNull(offsets[11]);
+  object.downloadSpeed = reader.readStringOrNull(offsets[12]);
+  object.downloadStatus = _DownloadTaskdownloadStatusValueEnumMap[
+          reader.readByteOrNull(offsets[13])] ??
+      WorkStatus.none;
+  object.errorMessage = reader.readStringOrNull(offsets[14]);
+  object.eta = reader.readStringOrNull(offsets[15]);
+  object.expectedChecksum = reader.readStringOrNull(offsets[16]);
+  object.filePath = reader.readStringOrNull(offsets[17]);
   object.id = id;
-  object.isPlaylistContainer = reader.readBool(offsets[14]);
-  object.playlistCompletedVideos = reader.readLongOrNull(offsets[15]);
-  object.playlistId = reader.readStringOrNull(offsets[16]);
-  object.playlistParentId = reader.readLongOrNull(offsets[17]);
-  object.playlistTotalVideos = reader.readLongOrNull(offsets[18]);
-  object.processTime = reader.readStringOrNull(offsets[19]);
-  object.progress = reader.readDouble(offsets[20]);
-  object.provider = reader.readString(offsets[21]);
+  object.isPlaylistContainer = reader.readBool(offsets[18]);
+  object.playlistCompletedVideos = reader.readLongOrNull(offsets[19]);
+  object.playlistId = reader.readStringOrNull(offsets[20]);
+  object.playlistParentId = reader.readLongOrNull(offsets[21]);
+  object.playlistTotalVideos = reader.readLongOrNull(offsets[22]);
+  object.processTime = reader.readStringOrNull(offsets[23]);
+  object.progress = reader.readDouble(offsets[24]);
+  object.provider = reader.readString(offsets[25]);
   object.qaHistory = reader.readObjectList<QAItem>(
-    offsets[22],
+    offsets[26],
     QAItemSchema.deserialize,
     allOffsets,
     QAItem(),
   );
-  object.startedAt = reader.readDateTimeOrNull(offsets[23]);
-  object.status = reader.readString(offsets[24]);
-  object.stepDetailsJson = reader.readStringOrNull(offsets[25]);
-  object.summary = reader.readStringOrNull(offsets[26]);
-  object.summaryType = reader.readStringOrNull(offsets[27]);
-  object.thumbnail = reader.readStringOrNull(offsets[28]);
-  object.title = reader.readStringOrNull(offsets[29]);
-  object.totalSize = reader.readStringOrNull(offsets[30]);
-  object.totalWorkers = reader.readLongOrNull(offsets[31]);
-  object.url = reader.readString(offsets[32]);
-  object.workersProgressJson = reader.readStringOrNull(offsets[33]);
+  object.startedAt = reader.readDateTimeOrNull(offsets[27]);
+  object.stepDetailsJson = reader.readStringOrNull(offsets[28]);
+  object.summary = reader.readStringOrNull(offsets[29]);
+  object.summaryStatus = _DownloadTasksummaryStatusValueEnumMap[
+          reader.readByteOrNull(offsets[30])] ??
+      WorkStatus.none;
+  object.summaryType = reader.readStringOrNull(offsets[31]);
+  object.thumbnail = reader.readStringOrNull(offsets[32]);
+  object.title = reader.readStringOrNull(offsets[33]);
+  object.totalSize = reader.readStringOrNull(offsets[34]);
+  object.totalWorkers = reader.readLongOrNull(offsets[35]);
+  object.url = reader.readString(offsets[36]);
+  object.workersProgressJson = reader.readStringOrNull(offsets[37]);
   return object;
 }
 
@@ -465,65 +516,77 @@ P _downloadTaskDeserializeProp<P>(
     case 5:
       return (reader.readStringOrNull(offset)) as P;
     case 6:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 7:
-      return (reader.readStringList(offset) ?? []) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 8:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 9:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readStringList(offset) ?? []) as P;
     case 10:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 11:
       return (reader.readStringOrNull(offset)) as P;
     case 12:
       return (reader.readStringOrNull(offset)) as P;
     case 13:
-      return (reader.readStringOrNull(offset)) as P;
+      return (_DownloadTaskdownloadStatusValueEnumMap[
+              reader.readByteOrNull(offset)] ??
+          WorkStatus.none) as P;
     case 14:
-      return (reader.readBool(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 15:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 16:
       return (reader.readStringOrNull(offset)) as P;
     case 17:
-      return (reader.readLongOrNull(offset)) as P;
-    case 18:
-      return (reader.readLongOrNull(offset)) as P;
-    case 19:
       return (reader.readStringOrNull(offset)) as P;
+    case 18:
+      return (reader.readBool(offset)) as P;
+    case 19:
+      return (reader.readLongOrNull(offset)) as P;
     case 20:
-      return (reader.readDouble(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 21:
-      return (reader.readString(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 22:
+      return (reader.readLongOrNull(offset)) as P;
+    case 23:
+      return (reader.readStringOrNull(offset)) as P;
+    case 24:
+      return (reader.readDouble(offset)) as P;
+    case 25:
+      return (reader.readString(offset)) as P;
+    case 26:
       return (reader.readObjectList<QAItem>(
         offset,
         QAItemSchema.deserialize,
         allOffsets,
         QAItem(),
       )) as P;
-    case 23:
-      return (reader.readDateTimeOrNull(offset)) as P;
-    case 24:
-      return (reader.readString(offset)) as P;
-    case 25:
-      return (reader.readStringOrNull(offset)) as P;
-    case 26:
-      return (reader.readStringOrNull(offset)) as P;
     case 27:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 28:
       return (reader.readStringOrNull(offset)) as P;
     case 29:
       return (reader.readStringOrNull(offset)) as P;
     case 30:
-      return (reader.readStringOrNull(offset)) as P;
+      return (_DownloadTasksummaryStatusValueEnumMap[
+              reader.readByteOrNull(offset)] ??
+          WorkStatus.none) as P;
     case 31:
-      return (reader.readLongOrNull(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 32:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 33:
+      return (reader.readStringOrNull(offset)) as P;
+    case 34:
+      return (reader.readStringOrNull(offset)) as P;
+    case 35:
+      return (reader.readLongOrNull(offset)) as P;
+    case 36:
+      return (reader.readString(offset)) as P;
+    case 37:
       return (reader.readStringOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -551,6 +614,42 @@ const _DownloadTaskcategoryValueEnumMap = {
   6: TaskCategory.failed,
   7: TaskCategory.settings,
   8: TaskCategory.playlist,
+};
+const _DownloadTaskdownloadStatusEnumValueMap = {
+  'none': 0,
+  'pending': 1,
+  'running': 2,
+  'paused': 3,
+  'completed': 4,
+  'failed': 5,
+  'cancelled': 6,
+};
+const _DownloadTaskdownloadStatusValueEnumMap = {
+  0: WorkStatus.none,
+  1: WorkStatus.pending,
+  2: WorkStatus.running,
+  3: WorkStatus.paused,
+  4: WorkStatus.completed,
+  5: WorkStatus.failed,
+  6: WorkStatus.cancelled,
+};
+const _DownloadTasksummaryStatusEnumValueMap = {
+  'none': 0,
+  'pending': 1,
+  'running': 2,
+  'paused': 3,
+  'completed': 4,
+  'failed': 5,
+  'cancelled': 6,
+};
+const _DownloadTasksummaryStatusValueEnumMap = {
+  0: WorkStatus.none,
+  1: WorkStatus.pending,
+  2: WorkStatus.running,
+  3: WorkStatus.paused,
+  4: WorkStatus.completed,
+  5: WorkStatus.failed,
+  6: WorkStatus.cancelled,
 };
 
 Id _downloadTaskGetId(DownloadTask object) {
@@ -1394,6 +1493,314 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'checksumAlgorithm',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'checksumAlgorithm',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'checksumAlgorithm',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'checksumAlgorithm',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'checksumAlgorithm',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'checksumAlgorithm',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'checksumAlgorithm',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'checksumAlgorithm',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'checksumAlgorithm',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'checksumAlgorithm',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'checksumAlgorithm',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumAlgorithmIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'checksumAlgorithm',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'checksumResult',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'checksumResult',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'checksumResult',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'checksumResult',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'checksumResult',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'checksumResult',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'checksumResult',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'checksumResult',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'checksumResult',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'checksumResult',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'checksumResult',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      checksumResultIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'checksumResult',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
       completedAtIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
@@ -1468,13 +1875,13 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementEqualTo(
+      completedStepsInternalElementEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -1482,7 +1889,7 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementGreaterThan(
+      completedStepsInternalElementGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1490,7 +1897,7 @@ extension DownloadTaskQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -1498,7 +1905,7 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementLessThan(
+      completedStepsInternalElementLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1506,7 +1913,7 @@ extension DownloadTaskQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -1514,7 +1921,7 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementBetween(
+      completedStepsInternalElementBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -1523,7 +1930,7 @@ extension DownloadTaskQueryFilter
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -1534,13 +1941,13 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementStartsWith(
+      completedStepsInternalElementStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -1548,13 +1955,13 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementEndsWith(
+      completedStepsInternalElementEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -1562,10 +1969,11 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementContains(String value, {bool caseSensitive = true}) {
+      completedStepsInternalElementContains(String value,
+          {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -1573,11 +1981,11 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementMatches(String pattern,
+      completedStepsInternalElementMatches(String pattern,
           {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -1585,30 +1993,30 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementIsEmpty() {
+      completedStepsInternalElementIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         value: '',
       ));
     });
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsElementIsNotEmpty() {
+      completedStepsInternalElementIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'completedSteps',
+        property: r'completedStepsInternal',
         value: '',
       ));
     });
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsLengthEqualTo(int length) {
+      completedStepsInternalLengthEqualTo(int length) {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
-        r'completedSteps',
+        r'completedStepsInternal',
         length,
         true,
         length,
@@ -1618,10 +2026,10 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsIsEmpty() {
+      completedStepsInternalIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
-        r'completedSteps',
+        r'completedStepsInternal',
         0,
         true,
         0,
@@ -1631,10 +2039,10 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsIsNotEmpty() {
+      completedStepsInternalIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
-        r'completedSteps',
+        r'completedStepsInternal',
         0,
         false,
         999999,
@@ -1644,13 +2052,13 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsLengthLessThan(
+      completedStepsInternalLengthLessThan(
     int length, {
     bool include = false,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
-        r'completedSteps',
+        r'completedStepsInternal',
         0,
         true,
         length,
@@ -1660,13 +2068,13 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsLengthGreaterThan(
+      completedStepsInternalLengthGreaterThan(
     int length, {
     bool include = false,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
-        r'completedSteps',
+        r'completedStepsInternal',
         length,
         include,
         999999,
@@ -1676,7 +2084,7 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      completedStepsLengthBetween(
+      completedStepsInternalLengthBetween(
     int lower,
     int upper, {
     bool includeLower = true,
@@ -1684,7 +2092,7 @@ extension DownloadTaskQueryFilter
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.listLength(
-        r'completedSteps',
+        r'completedStepsInternal',
         lower,
         includeLower,
         upper,
@@ -2058,6 +2466,62 @@ extension DownloadTaskQueryFilter
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      downloadStatusEqualTo(WorkStatus value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'downloadStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      downloadStatusGreaterThan(
+    WorkStatus value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'downloadStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      downloadStatusLessThan(
+    WorkStatus value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'downloadStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      downloadStatusBetween(
+    WorkStatus lower,
+    WorkStatus upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'downloadStatus',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
       errorMessageIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
@@ -2355,6 +2819,160 @@ extension DownloadTaskQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'eta',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'expectedChecksum',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'expectedChecksum',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'expectedChecksum',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'expectedChecksum',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'expectedChecksum',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'expectedChecksum',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'expectedChecksum',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'expectedChecksum',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'expectedChecksum',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'expectedChecksum',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'expectedChecksum',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      expectedChecksumIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'expectedChecksum',
         value: '',
       ));
     });
@@ -3490,141 +4108,6 @@ extension DownloadTaskQueryFilter
     });
   }
 
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition> statusEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'status',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      statusGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'status',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      statusLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'status',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition> statusBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'status',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      statusStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'status',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      statusEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'status',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      statusContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'status',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition> statusMatches(
-      String pattern,
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'status',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      statusIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'status',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
-      statusIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'status',
-        value: '',
-      ));
-    });
-  }
-
   QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
       stepDetailsJsonIsNull() {
     return QueryBuilder.apply(this, (query) {
@@ -3929,6 +4412,62 @@ extension DownloadTaskQueryFilter
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'summary',
         value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      summaryStatusEqualTo(WorkStatus value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'summaryStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      summaryStatusGreaterThan(
+    WorkStatus value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'summaryStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      summaryStatusLessThan(
+    WorkStatus value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'summaryStatus',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterFilterCondition>
+      summaryStatusBetween(
+    WorkStatus lower,
+    WorkStatus upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'summaryStatus',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
       ));
     });
   }
@@ -5001,6 +5540,34 @@ extension DownloadTaskQuerySortBy
     });
   }
 
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortByChecksumAlgorithm() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'checksumAlgorithm', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortByChecksumAlgorithmDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'checksumAlgorithm', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortByChecksumResult() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'checksumResult', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortByChecksumResultDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'checksumResult', Sort.desc);
+    });
+  }
+
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> sortByCompletedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'completedAt', Sort.asc);
@@ -5051,6 +5618,20 @@ extension DownloadTaskQuerySortBy
     });
   }
 
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortByDownloadStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'downloadStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortByDownloadStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'downloadStatus', Sort.desc);
+    });
+  }
+
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> sortByErrorMessage() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'errorMessage', Sort.asc);
@@ -5073,6 +5654,20 @@ extension DownloadTaskQuerySortBy
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> sortByEtaDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'eta', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortByExpectedChecksum() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'expectedChecksum', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortByExpectedChecksumDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'expectedChecksum', Sort.desc);
     });
   }
 
@@ -5206,18 +5801,6 @@ extension DownloadTaskQuerySortBy
     });
   }
 
-  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> sortByStatus() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'status', Sort.asc);
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> sortByStatusDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'status', Sort.desc);
-    });
-  }
-
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
       sortByStepDetailsJson() {
     return QueryBuilder.apply(this, (query) {
@@ -5241,6 +5824,19 @@ extension DownloadTaskQuerySortBy
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> sortBySummaryDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'summary', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> sortBySummaryStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'summaryStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      sortBySummaryStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'summaryStatus', Sort.desc);
     });
   }
 
@@ -5413,6 +6009,34 @@ extension DownloadTaskQuerySortThenBy
     });
   }
 
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenByChecksumAlgorithm() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'checksumAlgorithm', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenByChecksumAlgorithmDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'checksumAlgorithm', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenByChecksumResult() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'checksumResult', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenByChecksumResultDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'checksumResult', Sort.desc);
+    });
+  }
+
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> thenByCompletedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'completedAt', Sort.asc);
@@ -5463,6 +6087,20 @@ extension DownloadTaskQuerySortThenBy
     });
   }
 
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenByDownloadStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'downloadStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenByDownloadStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'downloadStatus', Sort.desc);
+    });
+  }
+
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> thenByErrorMessage() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'errorMessage', Sort.asc);
@@ -5485,6 +6123,20 @@ extension DownloadTaskQuerySortThenBy
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> thenByEtaDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'eta', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenByExpectedChecksum() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'expectedChecksum', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenByExpectedChecksumDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'expectedChecksum', Sort.desc);
     });
   }
 
@@ -5630,18 +6282,6 @@ extension DownloadTaskQuerySortThenBy
     });
   }
 
-  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> thenByStatus() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'status', Sort.asc);
-    });
-  }
-
-  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> thenByStatusDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'status', Sort.desc);
-    });
-  }
-
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
       thenByStepDetailsJson() {
     return QueryBuilder.apply(this, (query) {
@@ -5665,6 +6305,19 @@ extension DownloadTaskQuerySortThenBy
   QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> thenBySummaryDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'summary', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy> thenBySummaryStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'summaryStatus', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QAfterSortBy>
+      thenBySummaryStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'summaryStatus', Sort.desc);
     });
   }
 
@@ -5802,6 +6455,22 @@ extension DownloadTaskQueryWhereDistinct
     });
   }
 
+  QueryBuilder<DownloadTask, DownloadTask, QDistinct>
+      distinctByChecksumAlgorithm({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'checksumAlgorithm',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QDistinct> distinctByChecksumResult(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'checksumResult',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<DownloadTask, DownloadTask, QDistinct> distinctByCompletedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'completedAt');
@@ -5809,9 +6478,9 @@ extension DownloadTaskQueryWhereDistinct
   }
 
   QueryBuilder<DownloadTask, DownloadTask, QDistinct>
-      distinctByCompletedSteps() {
+      distinctByCompletedStepsInternal() {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'completedSteps');
+      return query.addDistinctBy(r'completedStepsInternal');
     });
   }
 
@@ -5836,6 +6505,13 @@ extension DownloadTaskQueryWhereDistinct
     });
   }
 
+  QueryBuilder<DownloadTask, DownloadTask, QDistinct>
+      distinctByDownloadStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'downloadStatus');
+    });
+  }
+
   QueryBuilder<DownloadTask, DownloadTask, QDistinct> distinctByErrorMessage(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -5847,6 +6523,14 @@ extension DownloadTaskQueryWhereDistinct
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'eta', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QDistinct>
+      distinctByExpectedChecksum({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'expectedChecksum',
+          caseSensitive: caseSensitive);
     });
   }
 
@@ -5918,13 +6602,6 @@ extension DownloadTaskQueryWhereDistinct
     });
   }
 
-  QueryBuilder<DownloadTask, DownloadTask, QDistinct> distinctByStatus(
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'status', caseSensitive: caseSensitive);
-    });
-  }
-
   QueryBuilder<DownloadTask, DownloadTask, QDistinct> distinctByStepDetailsJson(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -5937,6 +6614,13 @@ extension DownloadTaskQueryWhereDistinct
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'summary', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<DownloadTask, DownloadTask, QDistinct>
+      distinctBySummaryStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'summaryStatus');
     });
   }
 
@@ -6037,6 +6721,20 @@ extension DownloadTaskQueryProperty
     });
   }
 
+  QueryBuilder<DownloadTask, String?, QQueryOperations>
+      checksumAlgorithmProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'checksumAlgorithm');
+    });
+  }
+
+  QueryBuilder<DownloadTask, String?, QQueryOperations>
+      checksumResultProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'checksumResult');
+    });
+  }
+
   QueryBuilder<DownloadTask, DateTime?, QQueryOperations>
       completedAtProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -6045,9 +6743,9 @@ extension DownloadTaskQueryProperty
   }
 
   QueryBuilder<DownloadTask, List<String>, QQueryOperations>
-      completedStepsProperty() {
+      completedStepsInternalProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'completedSteps');
+      return query.addPropertyName(r'completedStepsInternal');
     });
   }
 
@@ -6070,6 +6768,13 @@ extension DownloadTaskQueryProperty
     });
   }
 
+  QueryBuilder<DownloadTask, WorkStatus, QQueryOperations>
+      downloadStatusProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'downloadStatus');
+    });
+  }
+
   QueryBuilder<DownloadTask, String?, QQueryOperations> errorMessageProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'errorMessage');
@@ -6079,6 +6784,13 @@ extension DownloadTaskQueryProperty
   QueryBuilder<DownloadTask, String?, QQueryOperations> etaProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'eta');
+    });
+  }
+
+  QueryBuilder<DownloadTask, String?, QQueryOperations>
+      expectedChecksumProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'expectedChecksum');
     });
   }
 
@@ -6153,12 +6865,6 @@ extension DownloadTaskQueryProperty
     });
   }
 
-  QueryBuilder<DownloadTask, String, QQueryOperations> statusProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'status');
-    });
-  }
-
   QueryBuilder<DownloadTask, String?, QQueryOperations>
       stepDetailsJsonProperty() {
     return QueryBuilder.apply(this, (query) {
@@ -6169,6 +6875,13 @@ extension DownloadTaskQueryProperty
   QueryBuilder<DownloadTask, String?, QQueryOperations> summaryProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'summary');
+    });
+  }
+
+  QueryBuilder<DownloadTask, WorkStatus, QQueryOperations>
+      summaryStatusProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'summaryStatus');
     });
   }
 

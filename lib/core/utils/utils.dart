@@ -227,3 +227,52 @@ String calculateProcessTime(DateTime startTime, [BuildContext? context]) {
     return "$milliseconds ${milliseconds == 1 ? millisecondStr : millisecondsStr}";
   }
 }
+
+class FileUtils {
+  /// Reserved Windows device names (case-insensitive).
+  static const _windowsReservedNames = {
+    'CON', 'PRN', 'AUX', 'NUL',
+    'COM0', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+    'LPT0', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+  };
+
+  /// Returns a version of [name] that is safe to use as a filename on
+  /// Windows, macOS and Linux.
+  ///
+  /// - Replaces characters forbidden by Windows / Unix filesystems with [replacement].
+  /// - Strips control characters (U+0000–U+001F).
+  /// - Removes trailing dots and spaces (disallowed by Windows).
+  /// - Prefixes Windows reserved device names with [replacement].
+  /// - Trims the result to [maxLength] characters.
+  /// - Falls back to `'download'` when the result would otherwise be empty.
+  static String sanitizeFilename(
+    String name, {
+    String replacement = '_',
+    int maxLength = 200,
+  }) {
+    // 1. Replace forbidden characters and control characters.
+    var result = name.replaceAll(
+      RegExp(r'[<>:"/\\|?*\x00-\x1F]'),
+      replacement,
+    );
+
+    // 2. Strip trailing dots and spaces (Windows rejects them).
+    result = result.replaceAll(RegExp(r'[. ]+$'), '');
+
+    // 3. Prefix reserved Windows device names to avoid conflicts.
+    final stem = result.contains('.')
+        ? result.substring(0, result.lastIndexOf('.'))
+        : result;
+    if (_windowsReservedNames.contains(stem.toUpperCase())) {
+      result = '$replacement$result';
+    }
+
+    // 4. Enforce maximum length.
+    if (result.length > maxLength) {
+      result = result.substring(0, maxLength);
+    }
+
+    // 5. Fallback for empty result.
+    return result.trim().isEmpty ? 'download' : result;
+  }
+}

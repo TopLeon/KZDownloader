@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_animation_progress_bar/flutter_animation_progress_bar.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -151,17 +153,36 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final l10n = AppLocalizations.of(context)!;
-    final isDownloading = task.status == 'downloading';
-    final isSummarizing = task.status == 'summarizing';
+
+    // Watch live progress for immediate UI updates (bypasses Isar watch coalescing)
+    final liveProgressMap = ref.watch(activeDownloadProgressProvider);
+    final live = liveProgressMap[task.id];
+
+    // Consider downloading active if status is 'downloading' OR if there's live progress data
+    final isDownloading =
+        task.downloadStatus == WorkStatus.running || live != null;
+    final isSummarizing = task.summaryStatus.isActive;
+
+    // Use live data when available for active downloads
+    final effectiveProgress = live?['progress'] as double? ?? task.progress;
+    final effectiveSpeed =
+        live?['downloadSpeed'] as String? ?? task.downloadSpeed;
+    final effectiveEta = live?['eta'] as String? ?? task.eta;
+    final effectiveActiveWorkers =
+        live?['activeWorkers'] as int? ?? task.activeWorkers;
+    // ignore: unused_local_variable
+    final effectiveTotalWorkers =
+        live?['totalWorkers'] as int? ?? task.totalWorkers;
+    final effectiveWorkersJson =
+        live?['workersProgressJson'] as String? ?? task.workersProgressJson;
 
     final hoverColor = Theme.of(context).brightness == Brightness.dark
         ? Colors.white.withOpacity(0.05)
         : Colors.black.withOpacity(0.05);
 
     final baseColor = Theme.of(context).scaffoldBackgroundColor;
-
     Color borderColor = colorScheme.primary.withOpacity(0.15);
-    if (task.status == 'error') {
+    if (task.downloadStatus == WorkStatus.failed) {
       borderColor = colorScheme.error.withOpacity(0.5);
     }
 
@@ -184,7 +205,7 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
             onEnter: (_) => setState(() => _isHovered = true),
             onExit: (_) => setState(() => _isHovered = false),
             child: RainbowAnimatedBorderForever(
-              disabled: !isSummarizing,
+              disabled: !isSummarizing && !isDownloading,
               borderRadius: 16,
               child: Container(
                 decoration: BoxDecoration(
@@ -194,17 +215,18 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                           ? Color.alphaBlend(hoverColor, baseColor)
                           : baseColor,
                   borderRadius: BorderRadius.circular(16),
-                  border: (widget.isSelected || task.status == 'error') &&
+                  border: (widget.isSelected ||
+                              task.downloadStatus == WorkStatus.failed) &&
                           !isSummarizing
                       ? Border.all(color: borderColor, width: 1)
                       : null,
                   boxShadow: [
                     if (widget.isSelected)
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 4,
+                        color: colorScheme.shadow.withOpacity(0.05),
+                        blurRadius: 20,
                         offset: const Offset(0, 2),
-                      ),
+                      )
                   ],
                 ),
                 child: ClipRRect(
@@ -234,7 +256,7 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                                           Text(
                                             task.title ?? l10n.analyzing,
                                             style: GoogleFonts.montserrat(
-                                                fontSize: 14,
+                                                fontSize: 15,
                                                 fontWeight: FontWeight.w500,
                                                 height: 1.2,
                                                 wordSpacing: 0.2,
@@ -243,10 +265,11 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                                                 widget.hideActions ? 1 : 2,
                                             overflow: TextOverflow.ellipsis,
                                           ),
+                                          const SizedBox(height: 2),
                                           Text(
-                                            "${task.url.split('/')[2]} - ${task.channelName ?? l10n.unknownChannel}",
+                                            "${task.url.split('/')[2].replaceAll("www.", "")} - ${task.channelName ?? l10n.unknownChannel}",
                                             style: GoogleFonts.montserrat(
-                                                fontSize: 11.5,
+                                                fontSize: 13,
                                                 color: Theme.of(context)
                                                     .colorScheme
                                                     .onSurfaceVariant),
@@ -299,18 +322,20 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                                                 MainAxisAlignment.end,
                                             children: [
                                               // Pause/Resume button for non-music downloads
-                                              if (task.status ==
-                                                      'downloading' ||
-                                                  task.status == 'paused')
+                                              if (task.downloadStatus ==
+                                                      WorkStatus.running ||
+                                                  task.downloadStatus ==
+                                                      WorkStatus.paused)
                                                 IconButton(
                                                   icon: FIcon(
-                                                    task.status == 'downloading'
+                                                    task.downloadStatus ==
+                                                            WorkStatus.running
                                                         ? RI.RiPauseLine
                                                         : RI.RiPlayLine,
                                                   ),
                                                   onPressed: () {
-                                                    if (task.status ==
-                                                        'downloading') {
+                                                    if (task.downloadStatus ==
+                                                        WorkStatus.running) {
                                                       ref
                                                           .read(
                                                               downloadListProvider
@@ -324,10 +349,11 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                                                           .resumeTask(task.id);
                                                     }
                                                   },
-                                                  tooltip: task.status ==
-                                                          'downloading'
-                                                      ? l10n.actionPause
-                                                      : l10n.actionResume,
+                                                  tooltip:
+                                                      task.downloadStatus ==
+                                                              WorkStatus.running
+                                                          ? l10n.actionPause
+                                                          : l10n.actionResume,
                                                   style: IconButton.styleFrom(
                                                     shape: CircleBorder(
                                                         side: BorderSide(
@@ -348,6 +374,8 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                                                             .primary,
                                                   ),
                                                 ),
+                                              const SizedBox(width: 4),
+
                                               IconButton(
                                                 icon: const FIcon(RI.RiLinkM),
                                                 onPressed: _copyLink,
@@ -372,6 +400,49 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                                                           .primary,
                                                 ),
                                               ),
+                                              const SizedBox(width: 4),
+                                              // Cancel button for active/paused downloads
+                                              if (task.downloadStatus ==
+                                                      WorkStatus.running ||
+                                                  task.downloadStatus ==
+                                                      WorkStatus.paused)
+                                                IconButton(
+                                                  icon: FIcon(
+                                                    RI.RiCloseLine,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .error,
+                                                  ),
+                                                  onPressed: () {
+                                                    ref
+                                                        .read(
+                                                            downloadListProvider
+                                                                .notifier)
+                                                        .cancelTask(task.id);
+                                                  },
+                                                  tooltip: l10n.cancelDownload,
+                                                  style: IconButton.styleFrom(
+                                                    shape: CircleBorder(
+                                                        side: BorderSide(
+                                                            width: 1,
+                                                            color: Theme.of(
+                                                                    context)
+                                                                .colorScheme
+                                                                .primary
+                                                                .withOpacity(
+                                                                    0.15))),
+                                                    backgroundColor:
+                                                        Theme.of(context)
+                                                            .colorScheme
+                                                            .tertiary,
+                                                    foregroundColor:
+                                                        Theme.of(context)
+                                                            .colorScheme
+                                                            .error,
+                                                  ),
+                                                ),
+
+                                              const SizedBox(width: 4),
                                               IconButton(
                                                 icon: FIcon(
                                                   RI.RiDeleteBinLine,
@@ -411,26 +482,35 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                               if (isDownloading) ...[
                                 const SizedBox(height: 6),
                                 if (task.category == TaskCategory.generic &&
-                                    task.activeWorkers != null &&
-                                    task.activeWorkers! > 1) ...[
+                                    effectiveActiveWorkers != null &&
+                                    effectiveActiveWorkers > 1) ...[
                                   // IDM-style multi-threaded download indicator
-                                  _buildIdmDownloadIndicator(context, task),
+                                  _buildIdmDownloadIndicatorLive(
+                                    context,
+                                    task,
+                                    effectiveProgress: effectiveProgress * 100,
+                                    effectiveSpeed: effectiveSpeed,
+                                    effectiveEta: effectiveEta,
+                                    effectiveActiveWorkers:
+                                        effectiveActiveWorkers,
+                                    effectiveWorkersJson: effectiveWorkersJson,
+                                  ),
                                 ] else ...[
                                   // Standard progress bar
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(2),
-                                    child: LinearProgressIndicator(
-                                      value: task.progress / 100,
-                                      minHeight: 3,
-                                      backgroundColor:
-                                          colorScheme.primary.withOpacity(0.2),
-                                    ),
+                                  FAProgressBar(
+                                    currentValue: effectiveProgress * 100,
+                                    progressColor: colorScheme.primary,
+                                    animatedDuration:
+                                        const Duration(milliseconds: 200),
+                                    size: 3,
+                                    backgroundColor:
+                                        colorScheme.primary.withOpacity(0.15),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    "${task.progress.toStringAsFixed(0)}% • ${task.downloadSpeed ?? '0.00MiB/s'} • ${l10n.eta}: ${task.eta ?? l10n.etaPlaceholder}",
+                                    "${(effectiveProgress * 100).toStringAsFixed(0)}% • ${effectiveSpeed ?? '0.00MiB/s'} • ${l10n.eta}: ${effectiveEta ?? l10n.etaPlaceholder}",
                                     style: GoogleFonts.montserrat(
-                                        fontSize: 9,
+                                        fontSize: 12,
                                         color: colorScheme.primary),
                                   )
                                 ],
@@ -456,15 +536,23 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
     return cardContent;
   }
 
-  Widget _buildIdmDownloadIndicator(BuildContext context, DownloadTask task) {
+  Widget _buildIdmDownloadIndicatorLive(
+    BuildContext context,
+    DownloadTask task, {
+    required double effectiveProgress,
+    required String? effectiveSpeed,
+    required String? effectiveEta,
+    required int? effectiveActiveWorkers,
+    required String? effectiveWorkersJson,
+  }) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     List<dynamic> workers = [];
-    if (task.workersProgressJson != null) {
+    if (effectiveWorkersJson != null) {
       try {
-        workers = jsonDecode(task.workersProgressJson!) as List<dynamic>;
+        workers = jsonDecode(effectiveWorkersJson) as List<dynamic>;
       } catch (e) {
         // Fallback if JSON parsing fails
       }
@@ -475,9 +563,9 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
       children: [
         // IDM-style worker status text
         Text(
-          l10n.proDownloading(task.activeWorkers ?? 0),
+          l10n.proDownloading(effectiveActiveWorkers ?? 0),
           style: GoogleFonts.montserrat(
-            fontSize: 9,
+            fontSize: 12,
             color: colorScheme.primary,
             fontWeight: FontWeight.w600,
           ),
@@ -517,18 +605,17 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                         Expanded(
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(2),
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              minHeight: 3,
-                              backgroundColor: isDone
-                                  ? colorScheme.primary.withOpacity(0.3)
-                                  : colorScheme.primary.withOpacity(0.15),
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                isDone
+                            child: FAProgressBar(
+                                currentValue: progress * 100,
+                                size: 3,
+                                animatedDuration:
+                                    const Duration(milliseconds: 200),
+                                backgroundColor: isDone
+                                    ? colorScheme.primary.withOpacity(0.3)
+                                    : colorScheme.primary.withOpacity(0.15),
+                                progressColor: isDone
                                     ? colorScheme.primary.withOpacity(0.7)
-                                    : colorScheme.primary,
-                              ),
-                            ),
+                                    : colorScheme.primary),
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -546,7 +633,7 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                       ],
                     ),
                   );
-                }).toList(),
+                }),
                 if (workers.length > 6)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -554,7 +641,7 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                       '... e altri ${workers.length - 6} worker',
                       style: GoogleFonts.montserrat(
                         fontSize: 7,
-                        color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                        color: colorScheme.onSurfaceVariant.withOpacity(0.9),
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -566,9 +653,9 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
         ],
         // Overall progress
         Text(
-          "${task.progress.toStringAsFixed(1)}% • ${task.downloadSpeed ?? '0.00MiB/s'} • ${l10n.eta}: ${task.eta ?? l10n.etaPlaceholder}",
+          "${effectiveProgress.toStringAsFixed(1)}% • ${effectiveSpeed ?? '0.00MiB/s'} • ${l10n.eta}: ${effectiveEta ?? l10n.etaPlaceholder}",
           style: GoogleFonts.montserrat(
-            fontSize: 9,
+            fontSize: 12,
             color: colorScheme.primary,
           ),
         ),
@@ -577,15 +664,15 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
   }
 
   Widget _buildMetaInternal(
-      FIconObject icon, String text, ThemeData theme, bool isDark) {
+      FIconObject icon, String text, ThemeData theme, bool isDark,
+      {Color? color}) {
+    final effectiveColor = color ?? theme.colorScheme.onSurfaceVariant;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        FIcon(icon, size: 12, color: theme.colorScheme.onSurfaceVariant),
+        FIcon(icon, size: 12, color: effectiveColor),
         const SizedBox(width: 4),
-        Text(text,
-            style: TextStyle(
-                fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
+        Text(text, style: TextStyle(fontSize: 12, color: effectiveColor)),
         const SizedBox(width: 8),
       ],
     );
@@ -596,25 +683,66 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
     final theme = Theme.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final l10n = AppLocalizations.of(context)!;
+    final colorScheme = theme.colorScheme;
 
     return Row(
       children: [
-        if (task.totalSize != null) ...[
-          // Check task status first
-          if (task.status == 'paused') ...[
-            _buildMetaInternal(RI.RiPauseLine, l10n.actionPause, theme, isDark),
-          ] else if (task.status == 'error') ...[
-            _buildMetaInternal(RI.RiAlertLine, l10n.error, theme, isDark),
-          ] else if (File(task.filePath ?? '').existsSync()) ...[
+        // Checksum Status
+        if (task.category == TaskCategory.generic &&
+            task.expectedChecksum != null &&
+            task.expectedChecksum!.isNotEmpty &&
+            task.downloadStatus == WorkStatus.completed) ...[
+          if (task.checksumResult == 'match')
             _buildMetaInternal(
-                RI.RiDownloadLine, l10n.downloaded, theme, isDark),
-          ] else ...[
-            _buildMetaInternal(RI.RiDeleteBinLine, l10n.deleted, theme, isDark),
-          ],
-          _buildMetaInternal(RI.RiSdCardLine, task.totalSize!, theme, isDark),
-        ] else ...[
-          _buildMetaInternal(RI.RiBardLine, l10n.summarized, theme, isDark),
+                RI.RiCheckboxCircleLine, l10n.checksumMatch, theme, isDark,
+                color: Colors.green)
+          else if (task.checksumResult == 'mismatch')
+            _buildMetaInternal(
+                RI.RiCloseCircleLine, l10n.checksumMismatch, theme, isDark,
+                color: colorScheme.error)
+          else if (task.checksumResult == 'error')
+            _buildMetaInternal(
+                RI.RiAlertLine, l10n.checksumError, theme, isDark,
+                color: colorScheme.error)
+          else if (task.checksumResult == null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  l10n.checksumVerifying,
+                  style: TextStyle(
+                      fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(width: 8),
+              ],
+            )
         ],
+        // Check task status first
+        if (task.downloadStatus == WorkStatus.paused) ...[
+          _buildMetaInternal(RI.RiPauseLine, l10n.actionPause, theme, isDark),
+        ] else if (task.downloadStatus == WorkStatus.failed) ...[
+          _buildMetaInternal(RI.RiAlertLine, l10n.error, theme, isDark),
+        ] else if (task.downloadStatus == WorkStatus.cancelled) ...[
+          _buildMetaInternal(RI.RiCloseLine, l10n.cancel, theme, isDark),
+        ] else if (File(task.filePath ?? '').existsSync()) ...[
+          _buildMetaInternal(RI.RiDownloadLine, l10n.downloaded, theme, isDark),
+        ] else if (task.filePath != null) ...[
+          _buildMetaInternal(RI.RiDeleteBinLine, l10n.deleted, theme, isDark),
+        ],
+
+        if (task.totalSize != null)
+          _buildMetaInternal(RI.RiSdCardLine, task.totalSize!, theme, isDark),
+        if (task.summary != null)
+          _buildMetaInternal(RI.RiBardLine, l10n.summarized, theme, isDark),
       ],
     );
   }
@@ -623,76 +751,80 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
     // For generic downloads, use file type icon
     if (task.category == TaskCategory.generic && task.thumbnail == null) {
       final fileInfo = _getFileTypeInfo(task.filePath ?? task.title);
-      return Container(
+      return SizedBox(
         width: 120,
-        height: 68,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              (fileInfo['color'] as Color).withOpacity(0.2),
-              (fileInfo['color'] as Color).withOpacity(0.4),
-            ],
-          ),
-        ),
-        child: Center(
-          child: FIcon(
-            fileInfo['icon'],
-            color: fileInfo['color'],
-            size: 36,
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  (fileInfo['color'] as Color).withOpacity(0.2),
+                  (fileInfo['color'] as Color).withOpacity(0.4),
+                ],
+              ),
+            ),
+            child: Center(
+              child: FIcon(
+                fileInfo['icon'],
+                color: fileInfo['color'],
+                size: 36,
+              ),
+            ),
           ),
         ),
       );
     }
 
     // Standard video/thumbnail display
-    return Container(
+    return SizedBox(
       width: 120,
-      height: 68,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white.withOpacity(0.1)
-            : Theme.of(context).colorScheme.surfaceContainerHighest,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (task.thumbnail != null)
-              Image.network(
-                task.thumbnail!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    _buildPlaceholder(Theme.of(context).colorScheme),
-              )
-            else
-              _buildPlaceholder(Theme.of(context).colorScheme),
-            if (task.thumbnail == null) ...[
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.3),
-                      Colors.black.withOpacity(0.6),
-                    ],
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (task.thumbnail != null)
+                Transform.scale(
+                  scale: 1.01,
+                  child: CachedNetworkImage(
+                    imageUrl: task.thumbnail!,
+                    filterQuality: FilterQuality.medium,
+                    fit: BoxFit.cover,
+                    errorWidget: (context, url, error) =>
+                        _buildPlaceholder(Theme.of(context).colorScheme),
+                  ),
+                )
+              else
+                _buildPlaceholder(Theme.of(context).colorScheme),
+              if (task.thumbnail == null) ...[
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withOpacity(0.3),
+                        Colors.black.withOpacity(0.6),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const Center(
-                child: FIcon(
-                  RI.RiVideoOnLine,
-                  color: Colors.white,
-                  size: 32,
+                const Center(
+                  child: FIcon(
+                    RI.RiVideoOnLine,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                 ),
-              ),
-            ]
-          ],
+              ]
+            ],
+          ),
         ),
       ),
     );

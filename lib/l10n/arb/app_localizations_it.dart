@@ -74,7 +74,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get downloadPath => 'Percorso Download';
 
   @override
-  String get defaultFormat => 'Formato Predefinito';
+  String get defaultFormat => 'Formato Video Predefinito';
+
+  @override
+  String get defaultAudioFormat => 'Formato Audio Predefinito';
 
   @override
   String get defaultQuality => 'Qualità Predefinita';
@@ -100,6 +103,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get qualityBest => 'Migliore';
+
+  @override
+  String get qualityHigh => 'Alta';
+
+  @override
+  String get qualityMedium => 'Media';
 
   @override
   String get qualityLow => 'Bassa';
@@ -268,7 +277,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get optionVideo => 'Video';
 
   @override
-  String get optionAudio => 'Audio';
+  String get optionAudio => 'Musica';
 
   @override
   String get unknownError => 'Errore sconosciuto';
@@ -550,7 +559,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get versionInfo => 'Versione 1.0.0 • Build 2026.2';
 
   @override
-  String get copyright => '© 2026 KZDownloader. Progetto Open Source.';
+  String get copyright => '© 2026 KZDownloader by Le0nZ (github.com/topleon)';
 
   @override
   String get eta => 'Tempo rimasto';
@@ -616,9 +625,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get chatWithVideo => 'Chatta col Video';
-
-  @override
-  String get qualityMedium => 'Media';
 
   @override
   String get aiNotAvailableForNonYoutube =>
@@ -786,6 +792,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get settingsAppearanceSubtitle => 'Scegli un tema per l\'interfaccia';
+
+  @override
+  String get summaryAnimations => 'Animazioni Riassunto';
+
+  @override
+  String get summaryAnimationsSubtitle =>
+      'Abilita testo animato per i riassunti';
 
   @override
   String get settingsDataStorage => 'Dati e Archiviazione';
@@ -1291,4 +1304,74 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get and => 'e';
+
+  @override
+  String get concurrentDownloadsGlobal => 'Download Concorrenti (Globale)';
+
+  @override
+  String get concurrentDownloadsGlobalDesc =>
+      'Numero massimo di file scaricati contemporaneamente';
+
+  @override
+  String get checksumLabel => 'Checksum (opzionale)';
+
+  @override
+  String get checksumHint => 'Se vuoi incolla hash MD5 o SHA256...';
+
+  @override
+  String get checksumAlgorithm => 'Algoritmo';
+
+  @override
+  String get checksumMatch => 'Checksum verificato';
+
+  @override
+  String get checksumMismatch => 'Checksum non corrisponde';
+
+  @override
+  String get checksumVerifying => 'Verifica checksum...';
+
+  @override
+  String get checksumError => 'Errore Checksum';
+
+  @override
+  String get linkExpired => 'Link scaduto (403)';
+
+  @override
+  String get linkExpiredMessage =>
+      'Il link di download è scaduto. Inserisci un nuovo URL per riprendere.';
+
+  @override
+  String get updateUrl => 'Aggiorna URL';
+
+  @override
+  String get updateUrlTitle => 'Aggiorna URL Download';
+
+  @override
+  String get updateUrlContent =>
+      'Il link di download è scaduto. Incolla un nuovo URL per riprendere il download da dove si era fermato.';
+
+  @override
+  String get updateUrlHint => 'Incolla nuovo URL...';
+
+  @override
+  String diskSpaceFree(String space) {
+    return '$space liberi';
+  }
+
+  @override
+  String insufficientDiskSpace(String available, String required) {
+    return 'Spazio su disco insufficiente';
+  }
+
+  @override
+  String get cancelDownload => 'Annulla';
+
+  @override
+  String get cancelDownloadTooltip => 'Annulla Download';
+
+  @override
+  String get queued => 'In coda';
+
+  @override
+  String get diskSpace => 'Spazio su disco';
 }

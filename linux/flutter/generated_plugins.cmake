@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  disk_space_2
   flutter_secure_storage_linux
   isar_community_flutter_libs
   open_file_linux
@@ -11,7 +12,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
-  rust_lib_kzdownloader
+  rhttp_plus
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

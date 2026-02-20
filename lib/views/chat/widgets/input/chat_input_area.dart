@@ -43,6 +43,10 @@ class ChatInputArea extends ConsumerStatefulWidget {
   final ValueChanged<bool> onSummarizeOnlyChanged;
   final ValueChanged<bool>? onPrefetchStateChanged;
   final VoidCallback? onMetadataFetched;
+  final String expectedChecksum;
+  final String checksumAlgorithm;
+  final ValueChanged<String>? onChecksumChanged;
+  final ValueChanged<String>? onAlgorithmChanged;
 
   const ChatInputArea({
     super.key,
@@ -61,6 +65,10 @@ class ChatInputArea extends ConsumerStatefulWidget {
     required this.onSummarizeOnlyChanged,
     this.onPrefetchStateChanged,
     this.onMetadataFetched,
+    this.expectedChecksum = '',
+    this.checksumAlgorithm = 'MD5',
+    this.onChecksumChanged,
+    this.onAlgorithmChanged,
   });
 
   @override
@@ -103,11 +111,16 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
       return;
     }
 
+    // Update _lastPrefetchedUrl BEFORE scheduling callback to prevent duplicates
+    if (isUrl) {
+      _lastPrefetchedUrl = text;
+    } else if (text.isEmpty) {
+      _lastPrefetchedUrl = '';
+    }
+
     // Use post-frame callback to avoid calling setState during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (isUrl) {
-        _lastPrefetchedUrl = text;
-
         // Notify parent that prefetch is starting
         widget.onPrefetchStateChanged?.call(true);
 
@@ -133,8 +146,6 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
           }
         });
       } else if (text.isEmpty) {
-        _lastPrefetchedUrl = '';
-
         // URL cleared - notify parent
         widget.onPrefetchStateChanged?.call(false);
       }
@@ -178,10 +189,15 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
     final l10n = AppLocalizations.of(context)!;
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
 
-    final showProviderSelector =
-        !_isVideoLink && widget.controller.text.isNotEmpty;
+    final showProviderSelector = !_isVideoLink &&
+        (widget.controller.text.startsWith('http://') ||
+            widget.controller.text.startsWith('https://'));
+
+    final isGeneric = showProviderSelector && !widget.summarizeOnly;
+
     final showVideoOptionsPanel = (_isVideoLink && widget.showVideoOptions) ||
-        (widget.summarizeOnly && widget.controller.text.isNotEmpty);
+        (widget.summarizeOnly && widget.controller.text.isNotEmpty) ||
+        (isGeneric && widget.controller.text.isNotEmpty);
 
     Widget inputArea = Container(
       width: widget.isCentered ? 600 : null,
@@ -195,9 +211,9 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
         ),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.1),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
+            color: colorScheme.shadow.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 2),
           )
         ],
       ),
@@ -220,7 +236,7 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
                   child: Icon(
                     Icons.link,
                     size: 20,
-                    color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.9),
                   ),
                 ),
 
@@ -228,14 +244,16 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
               Expanded(
                 child: TextField(
                   controller: widget.controller,
-                  style: const TextStyle(fontSize: 14),
+                  cursorHeight: 15,
+                  style: GoogleFonts.montserrat(fontSize: 15),
                   decoration: InputDecoration(
                     hintText: widget.summarizeOnly
                         ? l10n.pasteLinkSummaryHint
                         : l10n.pasteLinkHint,
-                    hintStyle: TextStyle(
-                      color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                    hintStyle: GoogleFonts.montserrat(
+                      color: colorScheme.onSurfaceVariant.withOpacity(0.9),
                     ),
+                    alignLabelWithHint: true,
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -261,9 +279,7 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
                         widget.summarizeOnly
                             ? RI.RiBardLine
                             : RI.RiDownloadLine,
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.black
-                            : Colors.white,
+                        color: Theme.of(context).colorScheme.onPrimary,
                         key: ValueKey(widget.summarizeOnly),
                         size: 20,
                       )),
@@ -289,6 +305,11 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
               onIsAudioChanged: widget.onIsAudioChanged,
               onSummarizeOnlyChanged: widget.onSummarizeOnlyChanged,
               l10n: l10n,
+              isGeneric: isGeneric,
+              expectedChecksum: widget.expectedChecksum,
+              checksumAlgorithm: widget.checksumAlgorithm,
+              onChecksumChanged: widget.onChecksumChanged,
+              onAlgorithmChanged: widget.onAlgorithmChanged,
             ),
           if (widget.summarizeOnly)
             Padding(
@@ -396,7 +417,7 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
         initialValue: widget.selectedProvider,
         tooltip: l10n.selectProvider,
         offset: const Offset(0, -120),
-        color: Theme.of(context).scaffoldBackgroundColor,
+        color: colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         onSelected: widget.onProviderChanged,
         itemBuilder: (context) => getGenericProviders(l10n).map((p) {
@@ -417,7 +438,7 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
                       Text(
                         p.description!,
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -430,7 +451,7 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            color: colorScheme.tertiary,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
@@ -445,7 +466,7 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
               Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 16,
-                color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                color: colorScheme.onSurfaceVariant.withOpacity(0.9),
               ),
             ],
           ),

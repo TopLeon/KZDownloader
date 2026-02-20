@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/core/providers/quality_provider.dart';
-import 'package:kzdownloader/core/services/settings_service.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
 import 'package:kzdownloader/views/chat/widgets/input/chat_input_area.dart';
 import 'package:kzdownloader/models/download_task.dart';
@@ -93,7 +92,7 @@ class _AddUrlDialogState extends ConsumerState<AddUrlDialog> {
           child: Container(
             constraints: const BoxConstraints(maxWidth: 600),
             margin: const EdgeInsets.symmetric(horizontal: 24),
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+            padding: const EdgeInsets.fromLTRB(64, 28, 64, 20),
             decoration: BoxDecoration(
               color: Theme.of(context).scaffoldBackgroundColor,
               borderRadius: BorderRadius.circular(16),
@@ -118,7 +117,7 @@ class _AddUrlDialogState extends ConsumerState<AddUrlDialog> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color:
-                        Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        Theme.of(context).colorScheme.primary.withOpacity(0.05),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -203,11 +202,20 @@ class _AddUrlDialogState extends ConsumerState<AddUrlDialog> {
                         case 'best':
                           quality = DownloadQuality.best;
                           break;
+                        case 'high':
+                          quality = DownloadQuality.high;
+                          break;
                         case 'medium':
                           quality = DownloadQuality.medium;
                           break;
                         case 'low':
                           quality = DownloadQuality.low;
+                          break;
+                        case '2160p':
+                          quality = DownloadQuality.p2160;
+                          break;
+                        case '1440p':
+                          quality = DownloadQuality.p1440;
                           break;
                         case '1080p':
                           quality = DownloadQuality.p1080;
@@ -304,27 +312,23 @@ class _AddUrlDialogState extends ConsumerState<AddUrlDialog> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          l10n.btnCancel,
-                          style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
+                Center(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                  ],
+                    child: Text(
+                      l10n.btnCancel,
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),

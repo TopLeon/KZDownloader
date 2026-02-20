@@ -41,7 +41,7 @@ final class VideoChatNotifierProvider
   }
 }
 
-String _$videoChatNotifierHash() => r'6cc5442a178a7a42b4321ce046d20454b57fab9e';
+String _$videoChatNotifierHash() => r'338c9b040a2d246e115c4b0cfb64f5fe801d15fc';
 
 abstract class _$VideoChatNotifier extends $Notifier<VideoChatState> {
   VideoChatState build();

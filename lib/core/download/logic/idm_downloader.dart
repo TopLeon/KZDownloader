@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:kzdownloader/src/rust/api/download.dart';
-import 'package:kzdownloader/src/rust/frb_generated.dart';
+import 'package:kzdownloader/core/services/download_service.dart';
+import 'package:kzdownloader/core/download/logic/speed_tracker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:rhttp_plus/rhttp_plus.dart';
+import 'package:ffi/ffi.dart';
 
-// IDM-like downloader with resume support, multi-threading, dynamic splitting, and state persistence.
+// IDM-like multi-threaded downloader with resume, dynamic splitting, and state persistence.
+// Workers run as real Dart isolates for multi-core parallelism.
+// File I/O is serialized through a dedicated writer isolate.
 class IDMDownloader {
   final int maxWorkers;
   final int minChunkSize;
@@ -19,27 +24,23 @@ class IDMDownloader {
   final Completer<void> _taskCompleter = Completer<void>();
   Timer? _monitorTimer;
 
-  // Writer Isolate
   // ignore: unused_field
-  Isolate? _writerIsolate;
+  Isolate? _writerIsolate; // retained for future explicit termination
   SendPort? _writerSendPort;
   final Completer<SendPort> _writerPortCompleter = Completer<SendPort>();
 
   int _totalFileSize = 0;
   int _totalDownloaded = 0;
+  // ignore: unused_field
   int _lastTotalDownloaded = 0;
-
-  // Session-average speed blended with short-window EMA for display.
-  double _sessionAvgSpeed = 0.0;
-  double _emaSpeed = 0.0;
-  static const double _emaAlpha = 0.12;
-  int _sessionDownloaded = 0;
-  late DateTime _sessionStartTime;
   DateTime _lastStateSave = DateTime.now();
   static const Duration _stateSaveInterval = Duration(seconds: 5);
   int _supervisorTick = 0;
-  // ignore: unused_field
-  bool _isResuming = false;
+
+  late final SpeedTracker _speed;
+
+  Completer<void>? _cancelCompleter;
+  int _pendingCancelCount = 0;
 
   late String _savePath;
   late String _metaPath;
@@ -50,12 +51,12 @@ class IDMDownloader {
   Stream<Map<String, dynamic>> get statusStream => _statusController.stream;
 
   IDMDownloader({
-    this.maxWorkers = 8,
-    this.minChunkSize = 5 * 1024 * 1024,
+    this.maxWorkers = 6,
+    this.minChunkSize = 3 * 1024 * 1024,
     this.metaDir,
   });
 
-  // Starts the download process.
+  // Starts the multi-threaded download.
   Future<void> download(
     String url,
     String savePath, {
@@ -77,9 +78,7 @@ class IDMDownloader {
       await _spawnWriter();
       final writerPort = await _writerPortCompleter.future;
 
-      bool resumed = await _tryRecoverState(url);
-      _isResuming = resumed;
-
+      final resumed = await _tryRecoverState(url);
       Map<String, String> currentHeaders = headers ?? {};
 
       if (!resumed) {
@@ -89,16 +88,11 @@ class IDMDownloader {
           _totalFileSize = knownFileSize;
           acceptRanges = knownAcceptRanges ?? false;
         } else {
-          Map<String, String> headRes;
-          try {
-            headRes = await getHeadInfoRust(url: url, headers: currentHeaders);
-          } catch (e) {
-            throw Exception("Unable to start download: $e");
-          }
+          final headRes = await getHeadInfo(url, currentHeaders);
           _totalFileSize = int.tryParse(headRes['content-length'] ?? '0') ?? 0;
-          String? acceptRangesHeader = headRes['accept-ranges'];
-          acceptRanges = acceptRangesHeader != null &&
-              acceptRangesHeader.toLowerCase().contains('bytes');
+          final arHeader = headRes['accept-ranges'];
+          acceptRanges =
+              arHeader != null && arHeader.toLowerCase().contains('bytes');
         }
 
         _writerSendPort!.send({
@@ -108,43 +102,37 @@ class IDMDownloader {
         });
 
         if (_totalFileSize == 0) {
-          throw Exception("Unknown file size.");
+          throw Exception(
+              "Unknown file size - not supported with range splitting.");
         }
 
         if (!acceptRanges) {
-          _workers.add(
-            _WorkerState(
-              id: 0,
-              startPos: 0,
-              currentPos: 0,
-              endPos: _totalFileSize - 1,
-              isDone: false,
-            ),
-          );
+          _workers.add(_WorkerState(
+            id: 0,
+            startPos: 0,
+            currentPos: 0,
+            endPos: _totalFileSize - 1,
+            isDone: false,
+          ));
         } else {
-          int effectiveWorkers = min(
-            maxWorkers,
-            _totalFileSize ~/ minChunkSize,
-          );
+          int effectiveWorkers =
+              min(maxWorkers, _totalFileSize ~/ minChunkSize);
           if (effectiveWorkers < 1) effectiveWorkers = 1;
 
-          int chunkSize =
+          final chunkSize =
               (_totalFileSize + effectiveWorkers - 1) ~/ effectiveWorkers;
           int start = 0;
 
           for (int i = 0; i < effectiveWorkers; i++) {
             int end = start + chunkSize - 1;
             if (i == effectiveWorkers - 1) end = _totalFileSize - 1;
-
-            _workers.add(
-              _WorkerState(
-                id: i,
-                startPos: start,
-                currentPos: start,
-                endPos: end,
-                isDone: false,
-              ),
-            );
+            _workers.add(_WorkerState(
+              id: i,
+              startPos: start,
+              currentPos: start,
+              endPos: end,
+              isDone: false,
+            ));
             start = end + 1;
           }
         }
@@ -158,20 +146,23 @@ class IDMDownloader {
         });
       }
 
+      final spawnFutures = <Future<void>>[];
       for (var w in _workers) {
         if (!w.isDone) {
-          _spawnWorker(w, url, currentHeaders, writerPort);
+          spawnFutures.add(_spawnWorker(w, url, currentHeaders, writerPort));
         }
       }
+      await Future.wait(spawnFutures);
 
+      _lastTotalDownloaded = _totalDownloaded;
       _startSupervisor(url, currentHeaders, writerPort);
       await _taskCompleter.future;
 
-      if (File(_metaPath).existsSync()) {
-        File(_metaPath).deleteSync();
-      }
+      if (File(_metaPath).existsSync()) File(_metaPath).deleteSync();
     } catch (e) {
-      _statusController.add({'status': 'error', 'error': e.toString()});
+      if (!_statusController.isClosed) {
+        _statusController.add({'status': 'error', 'error': e.toString()});
+      }
       if (!_taskCompleter.isCompleted) _taskCompleter.completeError(e);
       rethrow;
     } finally {
@@ -179,22 +170,21 @@ class IDMDownloader {
     }
   }
 
-  // Attempts to recover download state from the meta file.
+  // Attempts to recover download state from a persisted meta file.
   Future<bool> _tryRecoverState(String url) async {
     final metaFile = File(_metaPath);
     final dataFile = File(_savePath);
 
     if (await metaFile.exists() && await dataFile.exists()) {
       try {
-        String jsonString = await metaFile.readAsString();
-        Map<String, dynamic> state = jsonDecode(jsonString);
-
+        final state =
+            jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
         if (state['url'] != url) return false;
 
         _totalFileSize = state['totalSize'];
-        _totalDownloaded = 0;
+        _totalDownloaded = state['totalDownloaded'] ?? 0;
 
-        List<dynamic> workerList = state['workers'];
+        final workerList = state['workers'] as List<dynamic>;
         _workers.clear();
 
         for (var wData in workerList) {
@@ -205,12 +195,17 @@ class IDMDownloader {
             endPos: wData['endPos'],
             isDone: wData['isDone'],
           );
+          if (w.currentPos < w.endPos) w.isDone = false;
           _workers.add(w);
-          _totalDownloaded += (w.currentPos - w.startPos);
+
+          if (state['totalDownloaded'] == null) {
+            _totalDownloaded += (w.currentPos - w.startPos);
+          }
         }
 
         if (_workers.isEmpty) return false;
-
+        debugPrint(
+            "Resumed with ${_workers.length} workers from byte $_totalDownloaded of $_totalFileSize");
         return true;
       } catch (e) {
         debugPrint("Error reading state file: $e");
@@ -222,38 +217,33 @@ class IDMDownloader {
 
   Future<void> _saveState() async {
     if (_isSaving || _totalFileSize == 0) return;
-
     _isSaving = true;
 
     try {
       final state = {
         'url': _currentUrl.isNotEmpty ? _currentUrl : 'UNKNOWN',
         'totalSize': _totalFileSize,
+        'totalDownloaded': _totalDownloaded,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'workers': _workers
-            .map(
-              (w) => {
-                'id': w.id,
-                'startPos': w.startPos,
-                'currentPos': w.currentPos,
-                'endPos': w.endPos,
-                'isDone': w.isDone,
-              },
-            )
+            .map((w) => {
+                  'id': w.id,
+                  'startPos': w.startPos,
+                  'currentPos': w.currentPos,
+                  'endPos': w.endPos,
+                  'isDone': w.isDone,
+                })
             .toList(),
       };
 
-      final File metaFile = File(_metaPath);
+      final metaFile = File(_metaPath);
       if (!await metaFile.parent.exists()) {
         await metaFile.parent.create(recursive: true);
       }
 
       final tempFile = File("$_metaPath.tmp");
       await tempFile.writeAsString(jsonEncode(state));
-
-      if (await tempFile.exists()) {
-        await tempFile.rename(_metaPath);
-      }
+      if (await tempFile.exists()) await tempFile.rename(_metaPath);
     } catch (e) {
       debugPrint("Non-fatal error saving state: $e");
     } finally {
@@ -261,265 +251,415 @@ class IDMDownloader {
     }
   }
 
-  // Spawns a new download worker.
-  void _spawnWorker(
+  // Spawns a worker isolate for one byte-range segment.
+  Future<void> _spawnWorker(
     _WorkerState w,
     String url,
     Map<String, String> headers,
     SendPort writerPort,
   ) async {
-    ReceivePort workerRp = ReceivePort();
+    final receivePort = ReceivePort();
+    final readyCompleter = Completer<void>();
+    w.receivePort = receivePort;
 
-    final params = {
-      'url': url,
-      'headers': headers,
-      'start': w.currentPos,
-      'end': w.endPos,
-      'workerId': w.id,
-      'sendPort': workerRp.sendPort,
-      'writerPort': writerPort,
-      'acceptRanges': _workers.length > 1,
-    };
-
-    w.isolate = await Isolate.spawn(_isolateEntryPoint, params);
-
-    workerRp.listen((message) {
-      if (message is Map) {
-        String type = message['type'];
-        switch (type) {
-          case 'init':
-            w.controlPort = message['port'];
+    receivePort.listen((msg) {
+      if (msg is Map) {
+        switch (msg['type']) {
+          case 'ready':
+            w.workerPort = msg['port'] as SendPort;
+            if (!readyCompleter.isCompleted) readyCompleter.complete();
             break;
           case 'progress':
-            int bytesWritten = message['bytes'];
-            w.currentPos += bytesWritten;
-            _totalDownloaded += bytesWritten;
+            if (!w.isDone) {
+              _totalDownloaded += msg['bytes'] as int;
+              w.currentPos = msg['currentPos'] as int;
+            }
             break;
           case 'done':
             w.isDone = true;
-            w.currentPos = message['finalPos'];
-            workerRp.close();
             _checkAllDone();
             break;
+          case 'cancelled':
+            w.isDone = true;
+            _pendingCancelCount--;
+            if (_pendingCancelCount <= 0 &&
+                _cancelCompleter != null &&
+                !_cancelCompleter!.isCompleted) {
+              _cancelCompleter!.complete();
+            }
+            break;
           case 'error':
-            _statusController.add({'status': 'error', 'error': message['msg']});
-            workerRp.close();
+            if (!_statusController.isClosed) {
+              _statusController
+                  .add({'status': 'error', 'error': msg['message']});
+            }
+            w.isDone = true;
             break;
         }
       }
     });
-  }
 
-  // Entry point for worker isolates.
-  static void _isolateEntryPoint(Map<String, dynamic> params) async {
-    await RustLib.init();
-
-    final SendPort mainPort = params['sendPort'];
-    final SendPort writerPort = params['writerPort'];
-    final ReceivePort workerRp = ReceivePort();
-
-    mainPort.send({'type': 'init', 'port': workerRp.sendPort});
-
-    String url = params['url'];
-    int start = params['start'];
-    int end = params['end'];
-    int workerId = params['workerId'];
-    bool acceptRanges = params['acceptRanges'];
-    Map<String, String> headers = Map<String, String>.from(
-      params['headers'] ?? {},
+    w.isolate = await Isolate.spawn(
+      _workerIsolateEntryPoint,
+      _WorkerIsolateInitData(
+        workerSendPort: receivePort.sendPort,
+        workerId: w.id,
+        url: url,
+        headers: headers,
+        startPos: w.startPos,
+        currentPos: w.currentPos,
+        endPos: w.endPos,
+        writerPort: writerPort,
+      ),
     );
 
-    int currentPos = start;
-    int dynamicEnd = end;
+    await readyCompleter.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        throw Exception('Worker ${w.id} failed to initialize in time');
+      },
+    );
+  }
 
-    workerRp.listen((msg) {
-      if (msg is Map && msg['cmd'] == 'updateEnd') {
-        dynamicEnd = msg['val'];
+  // Worker isolate entry point — runs on a separate thread.
+  static void _workerIsolateEntryPoint(_WorkerIsolateInitData init) async {
+    await Rhttp.init();
+
+    final receivePort = ReceivePort();
+    init.workerSendPort.send({'type': 'ready', 'port': receivePort.sendPort});
+
+    int currentPos = init.currentPos;
+    int endPos = init.endPos;
+    final mainPort = init.workerSendPort;
+
+    bool cancelled = false;
+    bool isUnknownSize = (endPos == -1);
+
+    StreamSubscription<Uint8List>? activeHttpSub;
+    StreamController<Uint8List>? activeStreamController;
+
+    late StreamSubscription commandSub;
+    commandSub = receivePort.listen((msg) {
+      if (msg is Map) {
+        if (msg['cmd'] == 'cancel') {
+          cancelled = true;
+          try {
+            activeHttpSub?.cancel();
+          } catch (_) {}
+          try {
+            if (activeStreamController != null &&
+                !activeStreamController.isClosed) {
+              activeStreamController.close();
+            }
+          } catch (_) {}
+        } else if (msg['cmd'] == 'updateEnd') {
+          final newEnd = msg['newEnd'] as int;
+          if (newEnd < endPos && newEnd >= currentPos) endPos = newEnd;
+        }
       }
     });
 
     int retryCount = 0;
     const int maxRetries = 20;
-
     final random = Random();
 
-    bool isUnknownSize = (dynamicEnd == -1);
+    try {
+      while (!cancelled && (isUnknownSize || currentPos <= endPos)) {
+        try {
+          final rustStream = downloadChunkStream(
+            init.url,
+            currentPos,
+            isUnknownSize ? -1 : endPos,
+            init.headers,
+          );
 
-    while (isUnknownSize || currentPos <= dynamicEnd) {
-      try {
-        if (acceptRanges && !isUnknownSize) {
-          headers['Range'] = 'bytes=$currentPos-$dynamicEnd';
-        }
+          final controller = StreamController<Uint8List>();
+          activeStreamController = controller;
+          activeHttpSub = rustStream.listen(
+            controller.add,
+            onError: controller.addError,
+            onDone: controller.close,
+          );
 
-        if (isUnknownSize && currentPos > 0) {
-          headers['Range'] = 'bytes=$currentPos-';
-        }
+          final buffer = BytesBuilder(copy: false);
+          int bufferStartPos = currentPos;
+          const int batchSize = 2 * 1024 * 1024;
+          int localBytes = 0;
 
-        final rustStream = downloadChunkRust(
-          url: url,
-          start: BigInt.from(currentPos),
-          end: isUnknownSize ? BigInt.from(-1) : BigInt.from(dynamicEnd),
-          headers: headers,
-        );
+          // Backpressure: create a port to receive writer acks
+          final ackPort = ReceivePort();
+          final ackSendPort = ackPort.sendPort;
+          final ackIterator = StreamIterator(ackPort);
 
-        final buffer = BytesBuilder(copy: false);
-        int bufferStartPos = currentPos;
-        // 2MB batch size for efficient I/O throughput
-        const int batchSize = 2 * 1024 * 1024;
-        int bytesSinceLastReport = 0;
-        // 512KB progress report threshold — frequent enough for accurate speed EMA
-        const int reportThreshold = 512 * 1024;
+          DateTime lastProgressUpdate = DateTime.now();
+          const progressInterval = Duration(milliseconds: 200);
 
-        await for (final chunk in rustStream) {
-          if (retryCount > 0) retryCount = 0;
+          await for (final chunk in controller.stream) {
+            if (cancelled) break;
+            if (retryCount > 0) retryCount = 0;
+            if (!isUnknownSize && currentPos > endPos) break;
 
-          if (!isUnknownSize && currentPos > dynamicEnd) break;
-
-          Uint8List dataToProcess = chunk;
-          if (!isUnknownSize) {
-            final bytesLimit = dynamicEnd - currentPos + 1;
-            if (chunk.length > bytesLimit) {
-              dataToProcess = chunk.sublist(0, bytesLimit);
+            Uint8List data = chunk;
+            if (!isUnknownSize) {
+              final limit = endPos - currentPos + 1;
+              if (chunk.length > limit) data = chunk.sublist(0, limit);
             }
-          }
 
-          if (dataToProcess.isNotEmpty) {
-            buffer.add(dataToProcess);
-            currentPos += dataToProcess.length;
+            if (data.isNotEmpty) {
+              buffer.add(data);
+              currentPos += data.length;
+              localBytes += data.length;
 
-            if (buffer.length >= batchSize) {
-              final flushed = buffer.takeBytes();
-              _flushBufferToWriter(writerPort, flushed, bufferStartPos);
-
-              bytesSinceLastReport += flushed.length;
-
-              if (bytesSinceLastReport >= reportThreshold) {
-                mainPort.send({
-                  'type': 'progress',
-                  'workerId': workerId,
-                  'bytes': bytesSinceLastReport,
-                });
-                bytesSinceLastReport = 0;
+              final now = DateTime.now();
+              if (!cancelled &&
+                  now.difference(lastProgressUpdate) >= progressInterval) {
+                if (localBytes > 0) {
+                  mainPort.send({
+                    'type': 'progress',
+                    'bytes': localBytes,
+                    'currentPos': currentPos,
+                  });
+                  localBytes = 0;
+                  lastProgressUpdate = now;
+                }
               }
 
-              bufferStartPos = currentPos;
+              if (buffer.length >= batchSize) {
+                await _flushBufferToWriter(init.writerPort, buffer.takeBytes(),
+                    bufferStartPos, ackSendPort, ackIterator);
+                bufferStartPos = currentPos;
+              }
             }
           }
-        }
 
-        if (buffer.length > 0) {
-          final remaining = buffer.takeBytes();
-          bytesSinceLastReport += remaining.length;
-          _flushBufferToWriter(writerPort, remaining, bufferStartPos);
-          mainPort.send({
-            'type': 'progress',
-            'workerId': workerId,
-            'bytes': bytesSinceLastReport,
-          });
-        }
+          activeHttpSub = null;
+          activeStreamController = null;
 
-        if (!isUnknownSize) {
-          if (currentPos >= dynamicEnd) {
-            break;
-          } else {
-            throw Exception(
-              "Stream ended prematurely (Server closed connection)",
-            );
+          if (buffer.length > 0) {
+            await _flushBufferToWriter(init.writerPort, buffer.takeBytes(),
+                bufferStartPos, ackSendPort, ackIterator);
           }
-        } else {
-          break;
+
+          await ackIterator.cancel();
+          ackPort.close();
+
+          if (!cancelled && localBytes > 0) {
+            mainPort.send({
+              'type': 'progress',
+              'bytes': localBytes,
+              'currentPos': currentPos,
+            });
+          }
+
+          if (cancelled) break;
+
+          if (!isUnknownSize) {
+            if (currentPos >= endPos) {
+              break;
+            } else {
+              throw Exception("Stream ended prematurely");
+            }
+          } else {
+            break;
+          }
+        } catch (e) {
+          if (cancelled) break;
+
+          final err = e.toString();
+          if (err.contains("403") || err.contains("Forbidden")) {
+            mainPort
+                .send({'type': 'error', 'message': "Link Expired (403): $e"});
+            return;
+          }
+
+          retryCount++;
+          if (retryCount > maxRetries) {
+            mainPort.send({
+              'type': 'error',
+              'message': "Worker ${init.workerId} max retries exceeded: $e"
+            });
+            return;
+          }
+
+          final is429 =
+              err.contains("429") || err.contains("Too Many Requests");
+          final wait = is429
+              ? 10 + random.nextInt(10)
+              : min(30, pow(2, retryCount).toInt()) + random.nextInt(3);
+          debugPrint(
+              "Worker ${init.workerId} retry $retryCount/$maxRetries, waiting ${wait}s: $e");
+          await Future.delayed(Duration(seconds: wait));
         }
-      } catch (e) {
-        String errorStr = e.toString();
-        bool is429 =
-            errorStr.contains("429") || errorStr.contains("Too Many Requests");
-        bool is403 = errorStr.contains("403") || errorStr.contains("Forbidden");
-
-        if (is403) {
-          mainPort.send({'type': 'error', 'msg': "Link Expired (403): $e"});
-          return;
-        }
-
-        retryCount++;
-        if (retryCount > maxRetries) {
-          mainPort.send({'type': 'error', 'msg': "Max retries exceeded: $e"});
-          return;
-        }
-
-        int waitSeconds = is429
-            ? 10 + random.nextInt(10)
-            : min(30, pow(2, retryCount).toInt()) + random.nextInt(3);
-
-        sleep(Duration(seconds: waitSeconds));
       }
-    }
 
-    mainPort.send({
-      'type': 'done',
-      'workerId': workerId,
-      'finalPos': currentPos,
-    });
-    workerRp.close();
+      mainPort.send({'type': cancelled ? 'cancelled' : 'done'});
+    } catch (e) {
+      if (!cancelled) {
+        mainPort.send({
+          'type': 'error',
+          'message': 'Worker ${init.workerId} fatal error: $e'
+        });
+      }
+    } finally {
+      try {
+        activeHttpSub?.cancel();
+      } catch (_) {}
+      try {
+        if (activeStreamController != null &&
+            !activeStreamController.isClosed) {
+          activeStreamController.close();
+        }
+      } catch (_) {}
+      await commandSub.cancel();
+      await Future.delayed(const Duration(milliseconds: 50));
+      receivePort.close();
+      Isolate.exit();
+    }
   }
 
-  // Sends buffer to writer isolate using zero-copy TransferableTypedData.
-  static void _flushBufferToWriter(
-    SendPort writerPort,
-    Uint8List buffer,
-    int offset,
-  ) {
-    final transferable = TransferableTypedData.fromList([buffer]);
-    writerPort.send({'cmd': 'write', 'offset': offset, 'data': transferable});
+  // Ack-based buffer transfer to the writer isolate.
+  // Waits for the writer to acknowledge the write before returning,
+  // providing backpressure to prevent memory accumulation.
+  static Future<void> _flushBufferToWriter(
+      SendPort writerPort,
+      Uint8List buffer,
+      int offset,
+      SendPort ackSendPort,
+      StreamIterator ackIterator) async {
+    writerPort.send({
+      'cmd': 'write',
+      'offset': offset,
+      'data': TransferableTypedData.fromList([buffer]),
+      'ackPort': ackSendPort,
+    });
+    // Wait for writer to confirm the write is complete
+    await ackIterator.moveNext();
   }
 
   Future<void> _spawnWriter() async {
-    ReceivePort rp = ReceivePort();
+    final rp = ReceivePort();
     _writerIsolate = await Isolate.spawn(_writerEntryPoint, rp.sendPort);
     _writerSendPort = await rp.first as SendPort;
     _writerPortCompleter.complete(_writerSendPort);
   }
 
+  // Writer isolate — serializes all disk I/O via await-for.
   static void _writerEntryPoint(SendPort mainSendPort) async {
-    ReceivePort rp = ReceivePort();
+    final rp = ReceivePort();
     mainSendPort.send(rp.sendPort);
 
     RandomAccessFile? raf;
 
     await for (final msg in rp) {
       if (msg is Map) {
-        String cmd = msg['cmd'];
+        final cmd = msg['cmd'] as String;
 
         if (cmd == 'initFile') {
-          String path = msg['path'];
-          int size = msg['size'];
-          bool resume = msg['resume'] ?? false;
+          final path = msg['path'] as String;
+          final size = msg['size'] as int;
+          final resume = msg['resume'] ?? false;
 
           final f = File(path);
           if (!resume && await f.exists()) await f.delete();
+          raf = await f.open(mode: resume ? FileMode.append : FileMode.write);
 
-          raf = await f.open(mode: FileMode.write);
-          if (!resume && size > 0) {
+          if (!resume && size > 0 && Platform.isWindows) {
+            _setSparseFileWindows(path);
+          }
+          if (!resume && size > 0 && size < 500 * 1024 * 1024) {
             try {
               await raf.truncate(size);
-            } catch (e) {
-              await raf.setPosition(size - 1);
-              await raf.writeByte(0);
+            } catch (_) {
+              try {
+                await raf.setPosition(size - 1);
+                await raf.writeByte(0);
+                await raf.setPosition(0);
+              } catch (_) {}
             }
           }
         } else if (cmd == 'write') {
-          int offset = msg['offset'];
-          TransferableTypedData data = msg['data'];
-
+          final offset = msg['offset'] as int;
+          final data = msg['data'] as TransferableTypedData;
+          final ackPort = msg['ackPort'] as SendPort?;
           if (raf != null) {
-            await raf.setPosition(offset);
-            await raf.writeFrom(data.materialize().asUint8List());
+            try {
+              await raf.setPosition(offset);
+              await raf.writeFrom(data.materialize().asUint8List());
+            } catch (e) {
+              debugPrint('Writer: error at offset $offset: $e');
+            }
           }
+          // Send ack back to worker for backpressure
+          ackPort?.send('ack');
         } else if (cmd == 'close') {
-          await raf?.close();
-          raf = null;
+          if (raf != null) {
+            try {
+              await raf.flush();
+              await raf.close();
+            } catch (e) {
+              debugPrint('Writer: close error: $e');
+            }
+            raf = null;
+          }
+          await Future.delayed(const Duration(milliseconds: 50));
+          rp.close();
           Isolate.exit();
         }
       }
+    }
+  }
+
+  // Windows: mark file as sparse to avoid writing zeros on pre-allocation.
+  static void _setSparseFileWindows(String path) {
+    if (!Platform.isWindows) return;
+
+    try {
+      final kernel32 = DynamicLibrary.open('kernel32.dll');
+
+      const int fsctlSetSparse = 0x000900c4;
+      const int genericWrite = 0x40000000;
+      const int fileShareRead = 0x00000001;
+      const int fileShareWrite = 0x00000002;
+      const int openExisting = 3;
+      const int fileAttributeNormal = 0x00000080;
+
+      final createFileW = kernel32.lookupFunction<
+          IntPtr Function(
+              Pointer<Utf16>, Uint32, Uint32, Pointer, Uint32, Uint32, IntPtr),
+          int Function(
+              Pointer<Utf16>, int, int, Pointer, int, int, int)>('CreateFileW');
+
+      final deviceIoControl = kernel32.lookupFunction<
+          Int32 Function(IntPtr, Uint32, Pointer, Uint32, Pointer, Uint32,
+              Pointer<Uint32>, Pointer),
+          int Function(int, int, Pointer, int, Pointer, int, Pointer<Uint32>,
+              Pointer)>('DeviceIoControl');
+
+      final closeHandle =
+          kernel32.lookupFunction<Int32 Function(IntPtr), int Function(int)>(
+              'CloseHandle');
+
+      final pathPtr = path.toNativeUtf16();
+      final handle = createFileW(
+        pathPtr,
+        genericWrite,
+        fileShareRead | fileShareWrite,
+        nullptr,
+        openExisting,
+        fileAttributeNormal,
+        0,
+      );
+
+      if (handle != -1) {
+        final bytesReturned = calloc<Uint32>();
+        deviceIoControl(handle, fsctlSetSparse, nullptr, 0, nullptr, 0,
+            bytesReturned, nullptr);
+        calloc.free(bytesReturned);
+        closeHandle(handle);
+      }
+      calloc.free(pathPtr);
+    } catch (e) {
+      debugPrint('Failed to set sparse file flag: $e');
     }
   }
 
@@ -528,84 +668,66 @@ class IDMDownloader {
     Map<String, String> headers,
     SendPort writerPort,
   ) {
-    _sessionStartTime = DateTime.now();
-    _sessionDownloaded = 0;
-    _monitorTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
+    _speed = SpeedTracker(emaAlpha: 0.12);
+    _speed.start(initialBytes: _totalDownloaded);
+    _sendStatusUpdate();
+
+    _monitorTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       _supervisorTick++;
-      final now = DateTime.now();
-      final diff = _totalDownloaded - _lastTotalDownloaded;
+
       _lastTotalDownloaded = _totalDownloaded;
-      _sessionDownloaded += diff;
 
-      // Session-average speed: total session bytes / total session time.
-      // Inherently stable — no spikes possible.
-      final sessionElapsed =
-          now.difference(_sessionStartTime).inMicroseconds / 1000000.0;
-      if (sessionElapsed > 0.5 && _sessionDownloaded > 0) {
-        _sessionAvgSpeed = _sessionDownloaded / sessionElapsed;
-      }
-
-      // Short-window EMA for responsiveness to speed changes.
-      if (diff > 0) {
-        // Approximate instant speed from this tick (250ms nominal)
-        final instantSpeed = diff * 4.0;
-        _emaSpeed = _emaSpeed == 0
-            ? instantSpeed
-            : _emaAlpha * instantSpeed + (1 - _emaAlpha) * _emaSpeed;
-      }
-
-      // Blend: 70% session-average (stable) + 30% EMA (reactive)
-      final displaySpeed = _sessionAvgSpeed > 0
-          ? _sessionAvgSpeed * 0.7 + _emaSpeed * 0.3
-          : _emaSpeed;
-
-      // ETA from session-average speed — converges monotonically.
+      final displaySpeed = _speed.update(_totalDownloaded);
       final remaining = _totalFileSize - _totalDownloaded;
-      String? eta;
-      if (_sessionAvgSpeed > 0 && remaining > 0) {
-        eta = _formatEta(remaining / _sessionAvgSpeed);
-      }
+      final eta = _speed.formatEta(remaining);
 
-      // Throttle state persistence to reduce disk I/O
+      // Throttle state persistence
+      final now = DateTime.now();
       if (now.difference(_lastStateSave) >= _stateSaveInterval) {
         _lastStateSave = now;
         _saveState();
       }
 
-      if (!_statusController.isClosed) {
-        // Collect worker info
-        final workersInfo = _workers.map((w) {
-          final workerProgress = w.endPos - w.startPos > 0
-              ? (w.currentPos - w.startPos) / (w.endPos - w.startPos)
-              : 0.0;
-          return {
-            'id': w.id,
-            'progress': workerProgress,
-            'isDone': w.isDone,
-            'startPos': w.startPos,
-            'currentPos': w.currentPos,
-            'endPos': w.endPos,
-          };
-        }).toList();
+      _sendStatusUpdate(displaySpeed, eta);
 
-        _statusController.add({
-          'status': 'running',
-          'progress':
-              _totalFileSize > 0 ? _totalDownloaded / _totalFileSize : 0.0,
-          'speed': displaySpeed,
-          'eta': eta,
-          'downloaded': _totalDownloaded,
-          'totalSize': _totalFileSize,
-          'activeWorkers': _workers.where((w) => !w.isDone).length,
-          'totalWorkers': _workers.length,
-          'workers': workersInfo,
-        });
-      }
-
-      // Only check dynamic splitting every ~1s (4 ticks × 250ms)
+      // Dynamic splitting every ~2s
       if (_supervisorTick % 4 == 0) {
         _checkAndSplit(url, headers, writerPort);
       }
+    });
+  }
+
+  // Emits current download status to the stream.
+  void _sendStatusUpdate([double? speed, String? eta]) {
+    if (_statusController.isClosed) return;
+
+    final displaySpeed = speed ?? _speed.displaySpeed;
+    final calculatedEta =
+        eta ?? _speed.formatEta(_totalFileSize - _totalDownloaded);
+
+    final workersInfo = _workers
+        .map((w) => {
+              'id': w.id,
+              'progress': w.endPos - w.startPos > 0
+                  ? (w.currentPos - w.startPos) / (w.endPos - w.startPos)
+                  : 0.0,
+              'isDone': w.isDone,
+              'startPos': w.startPos,
+              'currentPos': w.currentPos,
+              'endPos': w.endPos,
+            })
+        .toList();
+
+    _statusController.add({
+      'status': 'running',
+      'progress': _totalFileSize > 0 ? _totalDownloaded / _totalFileSize : 0.0,
+      'speed': displaySpeed,
+      'eta': calculatedEta,
+      'downloaded': _totalDownloaded,
+      'totalSize': _totalFileSize,
+      'activeWorkers': _workers.where((w) => !w.isDone).length,
+      'totalWorkers': _workers.length,
+      'workers': workersInfo,
     });
   }
 
@@ -614,78 +736,105 @@ class IDMDownloader {
     Map<String, String> headers,
     SendPort writerPort,
   ) {
-    int activeWorkers = _workers.where((w) => !w.isDone).length;
+    int active = _workers.where((w) => !w.isDone).length;
+    if (active >= maxWorkers) return;
 
-    if (activeWorkers >= maxWorkers) return;
-
-    _WorkerState? slowestWorker;
-    int maxRemnant = 0;
+    _WorkerState? slowest;
+    int maxRemaining = 0;
     for (var w in _workers) {
       if (w.isDone) continue;
-      int remaining = w.endPos - w.currentPos;
-      if (remaining > maxRemnant) {
-        maxRemnant = remaining;
-        slowestWorker = w;
+      final rem = w.endPos - w.currentPos;
+      if (rem > maxRemaining) {
+        maxRemaining = rem;
+        slowest = w;
       }
     }
 
-    if (slowestWorker != null &&
-        maxRemnant > minChunkSize * 2 &&
+    if (slowest != null &&
+        maxRemaining > minChunkSize * 2 &&
         _workers.length < maxWorkers * 2) {
-      int newEnd = slowestWorker.currentPos + (maxRemnant ~/ 2);
-      if (slowestWorker.controlPort != null) {
-        slowestWorker.controlPort!.send({'cmd': 'updateEnd', 'val': newEnd});
-        final oldEnd = slowestWorker.endPos;
-        slowestWorker.endPos = newEnd;
+      final newEnd = slowest.currentPos + (maxRemaining ~/ 2);
+      final oldEnd = slowest.endPos;
 
-        int newId = _workers.length;
-        var newWorker = _WorkerState(
-          id: newId,
-          startPos: newEnd + 1,
-          currentPos: newEnd + 1,
-          endPos: oldEnd,
-          isDone: false,
-        );
-        _workers.add(newWorker);
-        _spawnWorker(newWorker, url, headers, writerPort);
+      if (slowest.workerPort == null) return;
+      try {
+        slowest.workerPort!
+            .send({'cmd': 'updateEnd', 'newEnd': newEnd, 'oldEnd': oldEnd});
+      } catch (e) {
+        debugPrint('Failed to send updateEnd to worker ${slowest.id}: $e');
+        return;
       }
-    }
-  }
 
-  // Formats ETA seconds into a human-readable string.
-  static String _formatEta(double etaSeconds) {
-    if (etaSeconds.isNaN || etaSeconds.isInfinite || etaSeconds < 0) {
-      return '...';
+      slowest.endPos = newEnd;
+      final newWorker = _WorkerState(
+        id: _workers.length,
+        startPos: newEnd + 1,
+        currentPos: newEnd + 1,
+        endPos: oldEnd,
+        isDone: false,
+      );
+      _workers.add(newWorker);
+      _spawnWorker(newWorker, url, headers, writerPort);
     }
-    if (etaSeconds < 60) return '${etaSeconds.toInt()}s';
-    if (etaSeconds < 3600) {
-      final m = (etaSeconds / 60).toInt();
-      final s = (etaSeconds % 60).toInt();
-      return '${m}m ${s}s';
-    }
-    final h = (etaSeconds / 3600).toInt();
-    final m = ((etaSeconds % 3600) / 60).toInt();
-    return '${h}h ${m}m';
   }
 
   void _checkAllDone() {
-    if (_workers.every((w) => w.isDone)) {
-      if (!_taskCompleter.isCompleted) _taskCompleter.complete();
+    if (_workers.every((w) => w.isDone) && !_taskCompleter.isCompleted) {
+      _taskCompleter.complete();
     }
   }
 
-  // Pauses the download.
+  // Cooperatively pauses all workers and persists state.
   Future<void> pause() async {
     _monitorTimer?.cancel();
 
-    await _saveState();
+    final activeWorkers =
+        _workers.where((w) => !w.isDone && w.workerPort != null).toList();
 
-    for (var w in _workers) {
-      w.isolate?.kill(priority: Isolate.immediate);
+    if (activeWorkers.isNotEmpty) {
+      _cancelCompleter = Completer<void>();
+      _pendingCancelCount = activeWorkers.length;
+
+      for (var w in activeWorkers) {
+        try {
+          w.workerPort!.send({'cmd': 'cancel'});
+        } catch (_) {
+          _pendingCancelCount--;
+        }
+      }
+
+      if (_pendingCancelCount > 0) {
+        await _cancelCompleter!.future.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => debugPrint(
+              'Cancel timeout — $_pendingCancelCount workers did not respond'),
+        );
+      }
     }
 
+    for (var w in _workers) {
+      try {
+        w.isolate?.kill(priority: Isolate.immediate);
+      } catch (_) {}
+      w.isolate = null;
+    }
+
+    await Future.delayed(const Duration(milliseconds: 100));
+    for (var w in _workers) {
+      try {
+        w.receivePort?.close();
+      } catch (_) {}
+      w.receivePort = null;
+    }
+
+    _cancelCompleter = null;
+    await _saveState();
+
     if (_writerSendPort != null) {
-      _writerSendPort!.send({'cmd': 'close'});
+      await Future.delayed(const Duration(milliseconds: 100));
+      try {
+        _writerSendPort!.send({'cmd': 'close'});
+      } catch (_) {}
     }
 
     if (!_statusController.isClosed) {
@@ -700,19 +849,27 @@ class IDMDownloader {
 
   Future<void> _cleanup() async {
     _monitorTimer?.cancel();
+
     for (var w in _workers) {
-      w.isolate?.kill(priority: Isolate.immediate);
+      try {
+        w.isolate?.kill(priority: Isolate.immediate);
+      } catch (_) {}
+      w.isolate = null;
+      try {
+        w.receivePort?.close();
+      } catch (_) {}
+      w.receivePort = null;
     }
+
     if (_writerSendPort != null) {
       try {
+        await Future.delayed(const Duration(milliseconds: 100));
         _writerSendPort!.send({'cmd': 'close'});
-      } catch (e) {
-        //
-      }
+      } catch (_) {}
+      _writerSendPort = null;
     }
-    if (!_statusController.isClosed) {
-      await _statusController.close();
-    }
+
+    if (!_statusController.isClosed) await _statusController.close();
   }
 }
 
@@ -721,9 +878,10 @@ class _WorkerState {
   int startPos;
   int currentPos;
   int endPos;
-  Isolate? isolate;
-  SendPort? controlPort;
   bool isDone;
+  Isolate? isolate;
+  SendPort? workerPort;
+  ReceivePort? receivePort;
 
   _WorkerState({
     required this.id,
@@ -731,5 +889,27 @@ class _WorkerState {
     required this.currentPos,
     required this.endPos,
     required this.isDone,
+  });
+}
+
+class _WorkerIsolateInitData {
+  final SendPort workerSendPort;
+  final int workerId;
+  final String url;
+  final Map<String, String> headers;
+  final int startPos;
+  final int currentPos;
+  final int endPos;
+  final SendPort writerPort;
+
+  _WorkerIsolateInitData({
+    required this.workerSendPort,
+    required this.workerId,
+    required this.url,
+    required this.headers,
+    required this.startPos,
+    required this.currentPos,
+    required this.endPos,
+    required this.writerPort,
   });
 }

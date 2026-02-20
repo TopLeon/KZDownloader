@@ -46,21 +46,29 @@ dependencies:
   path: any
   not_static_icons: ^0.31.0
   animated_custom_dropdown: ^3.1.1
+  cached_network_image: ^3.4.1
   
   # --- PLAYBACK ---
   just_audio: ^0.9.36
   audio_video_progress_bar: ^2.0.3
+  just_audio_media_kit: ^2.1.0
+  media_kit_libs_windows_audio: any
 
-  # --- RUST BRIDGE ---
-  rust_lib_kzdownloader:
-    path: rust_builder
-  flutter_rust_bridge: 2.11.1
+  # --- HTTP CLIENT ---
+  rhttp_plus: 0.11.7
+
+  # --- FFI ---
+  ffi: ^2.1.0
 
   # --- AI ---
   langchain: ^0.8.0
   langchain_ollama: ^0.4.1
   langchain_openai: ^0.8.1+1
   langchain_google: ^0.7.1+2
+  flutter_streaming_text_markdown: ^1.3.2
+  flutter_animation_progress_bar: ^2.3.1
+  crypto: ^3.0.7
+  disk_space_2: ^1.0.12
 
 dev_dependencies:
   flutter_test:

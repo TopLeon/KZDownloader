@@ -158,4 +158,137 @@ class DbService {
   Stream<List<DownloadTask>> watchTasks() {
     return isar.downloadTasks.where().watch(fireImmediately: true);
   }
+
+  // ============================================================================
+  // ATOMIC UPDATE METHODS - Fix for Race Conditions
+  // ============================================================================
+
+  // Generic atomic update: reads, modifies, and saves in a single transaction.
+  // This prevents "Lost Update" race conditions where concurrent reads/writes
+  // can overwrite each other's changes.
+  Future<void> updateTask(int id, void Function(DownloadTask) updates) async {
+    await isar.writeTxn(() async {
+      final task = await isar.downloadTasks.get(id);
+      if (task != null) {
+        updates(task);
+        await isar.downloadTasks.put(task);
+      }
+    });
+  }
+
+  // Atomically updates download progress fields.
+  Future<void> updateDownloadProgress({
+    required int id,
+    required double progress,
+    String? downloadSpeed,
+    String? eta,
+    int? totalSize,
+  }) async {
+    await updateTask(id, (task) {
+      task.progress = progress;
+      task.downloadSpeed = downloadSpeed;
+      task.eta = eta;
+      if (totalSize != null) task.totalSize = totalSize.toString();
+    });
+  }
+
+  // Atomically sets download state using the WorkStatus state machine.
+  // Converts legacy boolean parameters to the appropriate WorkStatus value.
+  Future<void> setDownloadState(int id, {
+    bool isDownloading = false,
+    bool isPaused = false,
+    bool isCancelled = false,
+  }) async {
+    await updateTask(id, (task) {
+      if (isCancelled) {
+        task.downloadStatus = WorkStatus.cancelled;
+      } else if (isPaused) {
+        task.downloadStatus = WorkStatus.paused;
+      } else if (isDownloading) {
+        task.downloadStatus = WorkStatus.running;
+      }
+    });
+  }
+
+  // Atomically adds a completed step (prevents duplicates).
+  Future<void> addCompletedStep(int id, String step) async {
+    await updateTask(id, (task) {
+      if (!task.completedSteps.contains(step)) {
+        task.completedSteps = [...task.completedSteps, step];
+      }
+    });
+  }
+
+  // Atomically adds multiple completed steps.
+  Future<void> addCompletedSteps(int id, List<String> steps) async {
+    await updateTask(id, (task) {
+      final currentSteps = Set<String>.from(task.completedSteps);
+      currentSteps.addAll(steps);
+      task.completedSteps = currentSteps.toList();
+    });
+  }
+
+  // Atomically updates summary-related fields.
+  Future<void> updateSummary({
+    required int id,
+    String? summary,
+    WorkStatus? summaryStatus,
+    String? cachedTranscript,
+    String? cachedDescription,
+  }) async {
+    await updateTask(id, (task) {
+      if (summary != null) task.summary = summary;
+      if (summaryStatus != null) task.summaryStatus = summaryStatus;
+      if (cachedTranscript != null) task.cachedTranscript = cachedTranscript;
+      if (cachedDescription != null) task.cachedDescription = cachedDescription;
+    });
+  }
+
+  // Atomically sets summary state flags
+  Future<void> setSummaryState(int id, {
+    WorkStatus? summaryStatus,
+    String? summary,
+  }) async {
+    await updateTask(id, (task) {
+      if (summaryStatus != null) task.summaryStatus = summaryStatus;
+      if (summary != null) task.summary = summary;
+    });
+  }
+
+  // Atomically sets error state for download
+  Future<void> setError(int id, String errorMessage) async {
+    await updateTask(id, (task) {
+      task.downloadStatus = WorkStatus.failed;
+      task.errorMessage = errorMessage;
+    });
+  }
+
+  // Atomically updates error message.
+  Future<void> updateErrorMessage(int id, String? errorMessage) async {
+    await updateTask(id, (task) {
+      task.errorMessage = errorMessage;
+    });
+  }
+
+  // Atomically updates file path and directory.
+  Future<void> updateFilePath(int id, String? filePath, String? dirPath) async {
+    await updateTask(id, (task) {
+      if (filePath != null) task.filePath = filePath;
+      if (dirPath != null) task.dirPath = dirPath;
+    });
+  }
+
+  // Atomically updates worker progress (for chunked downloads).
+  Future<void> updateWorkerProgress({
+    required int id,
+    int? activeWorkers,
+    int? totalWorkers,
+    String? workersProgressJson,
+  }) async {
+    await updateTask(id, (task) {
+      if (activeWorkers != null) task.activeWorkers = activeWorkers;
+      if (totalWorkers != null) task.totalWorkers = totalWorkers;
+      if (workersProgressJson != null) task.workersProgressJson = workersProgressJson;
+    });
+  }
 }

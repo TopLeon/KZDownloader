@@ -9,6 +9,7 @@ import 'package:kzdownloader/models/download_task.dart';
 import 'package:kzdownloader/views/chat/widgets/audio_player_bar.dart';
 import 'package:ultimate_flutter_icons/ficon.dart';
 import 'package:ultimate_flutter_icons/icons/ri.dart';
+import 'package:window_manager/window_manager.dart';
 
 class Sidebar extends ConsumerStatefulWidget {
   final VoidCallback onNewDownload;
@@ -37,25 +38,34 @@ class _SidebarState extends ConsumerState<Sidebar> {
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
 
-    int getCount(TaskCategory cat) =>
-        downloadList.where((t) => t.category == cat).length;
+    int getCount(TaskCategory cat) {
+      if (cat == TaskCategory.video) {
+        return downloadList
+            .where((t) => t.category == cat && t.playlistParentId == null)
+            .length;
+      } else if (cat == TaskCategory.music) {
+        return downloadList
+            .where((t) => t.category == cat && !t.isPlaylistContainer)
+            .length;
+      } else {
+        return downloadList.where((t) => t.category == cat).length;
+      }
+    }
+
+    // debugPrint(downloadList[0].computedStatus.toString());
 
     int getInProgressCount() => downloadList
-        .where((t) => [
-              'downloading',
-              'pending',
-              'summarizing',
-              'paused',
-              'converting'
-            ].contains(t.status))
+        .where((t) =>
+            t.downloadStatus == WorkStatus.running &&
+                t.playlistParentId == null ||
+            t.summaryStatus.isActive)
         .length;
 
-    int getFailedCount() => downloadList
-        .where((t) => ['error', 'cancelled'].contains(t.status))
-        .length;
+    int getFailedCount() =>
+        downloadList.where((t) => t.downloadStatus == WorkStatus.failed).length;
 
     return Container(
-      width: widget.isMinimized ? 80 : MediaQuery.of(context).size.width * 0.2,
+      width: widget.isMinimized ? 80 : 240,
       padding: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
         color: colorScheme.surface,
@@ -85,44 +95,46 @@ class _SidebarState extends ConsumerState<Sidebar> {
               ),
             )
           else
-            Padding(
-              padding: EdgeInsets.only(
-                  right: 14,
-                  left: 16,
-                  top: Platform.isMacOS ? 18 : 0,
-                  bottom: 6),
-              child: Row(
-                children: [
-                  Text(
-                    'KZ',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  Text(
-                    'Downloader',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w300,
-                      color: colorScheme.onSurface,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (widget.onToggle != null)
-                    InkWell(
-                      onTap: widget.onToggle,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: FIcon(RI.RiSideBarFill,
-                            size: 18, color: colorScheme.onSurfaceVariant),
+            DragToMoveArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                    right: 14,
+                    left: 16,
+                    top: Platform.isMacOS ? 18 : 0,
+                    bottom: 6),
+                child: Row(
+                  children: [
+                    Text(
+                      'KZ',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                ],
+                    Text(
+                      'Downloader',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurface,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (widget.onToggle != null)
+                      InkWell(
+                        onTap: widget.onToggle,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4.0),
+                          child: FIcon(RI.RiSideBarFill,
+                              size: 18, color: colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           Expanded(
@@ -297,7 +309,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
             ),
           ),
           // Audio Player Bar
-          const AudioPlayerBar(),
+          if (!widget.isMinimized) const AudioPlayerBar(),
+          const SizedBox(height: 16),
           Padding(
             padding:
                 EdgeInsets.symmetric(horizontal: widget.isMinimized ? 0 : 14),
@@ -480,6 +493,14 @@ class _SidebarItem extends StatelessWidget {
                   // Subtle background for selection
                   : Colors.transparent,
               borderRadius: const BorderRadius.all(Radius.circular(12)),
+              boxShadow: [
+                if (isSelected)
+                  BoxShadow(
+                    color: colorScheme.shadow.withOpacity(0.025),
+                    blurRadius: 20,
+                    offset: const Offset(0, 2),
+                  )
+              ],
               border: isSelected
                   ? Border.all(
                       color: colorScheme.primary.withOpacity(0.15), width: 1)
@@ -529,7 +550,7 @@ class _SidebarItem extends StatelessWidget {
                     child: Text(
                       count.toString(),
                       style: GoogleFonts.montserrat(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: isSelected ? activeColor : inactiveColor,
                       ),

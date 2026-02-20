@@ -328,8 +328,12 @@ ${video.channelName ?? "N/A"}
     }
 
     try {
+      final settings = SettingsService();
+      final lang = await settings.getLanguage();
+      final langCode = (lang == 'it') ? 'it' : 'en';
+
       final yt = YtDlpService();
-      final t = await yt.fetchVideoSubtitles(video.url);
+      final t = await yt.fetchVideoSubtitles(video.url, langCode: langCode);
       video.cachedTranscript = t;
       await _dbService.saveTask(video);
 

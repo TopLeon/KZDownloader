@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:langchain/langchain.dart';
 import 'package:langchain_ollama/langchain_ollama.dart';
@@ -26,6 +27,19 @@ class LlmMsg {
   LlmMsg({required this.role, required this.content});
 }
 
+// Internal class to represent a queued request.
+class _QueuedRequest {
+  final List<LlmMsg> messages;
+  final int maxTokens;
+  final Completer<Stream<String>> completer;
+
+  _QueuedRequest({
+    required this.messages,
+    required this.maxTokens,
+    required this.completer,
+  });
+}
+
 // Service that handles interactions with the Ollama LLM.
 class LlmService {
   static final LlmService _instance = LlmService._internal();
@@ -35,7 +49,10 @@ class LlmService {
   String? _selectedModelName;
   LlmProvider _activeProvider = LlmProvider.ollama;
   String? _apiKey;
-  bool _isBusy = false;
+  
+  // Request queue to handle concurrent requests sequentially.
+  final Queue<_QueuedRequest> _requestQueue = Queue<_QueuedRequest>();
+  bool _isProcessing = false;
 
   static const String _ollamaBaseUrl = 'http://localhost:11434';
 
@@ -107,15 +124,18 @@ class LlmService {
         List<OllamaModelInfo> models = [];
         if (data['models'] != null) {
           for (var m in data['models']) {
-            final String fullName = m['displayName'] ?? '';
+            // Use 'name' field for API (e.g., "models/gemini-1.5-pro")
+            // Use 'displayName' for UI display (e.g., "Gemini 1.5 Pro")
+            final String modelName = m['name'] ?? '';
+            final String displayName = m['displayName'] ?? modelName;
 
             final supportedMethods = m['supportedGenerationMethods'] as List?;
             if (supportedMethods != null &&
                 supportedMethods.contains('generateContent')) {
               models.add(OllamaModelInfo(
-                name: fullName,
+                name: modelName,
                 size: '-',
-                details: m['displayName'] ?? 'Google',
+                details: displayName,
               ));
             }
           }
@@ -124,9 +144,8 @@ class LlmService {
         return models;
       } catch (e) {
         return [
-          OllamaModelInfo(name: 'gemini-2.5-pro', size: '-', details: 'Google'),
-          OllamaModelInfo(
-              name: 'gemini-2.5-flash', size: '-', details: 'Google'),
+          OllamaModelInfo(name: 'models/gemini-2.5-pro', size: '-', details: 'Gemini 2.5 Pro'),
+          OllamaModelInfo(name: 'models/gemini-2.5-flash', size: '-', details: 'Gemini 2.5 Flash'),
         ];
       }
     }
@@ -192,10 +211,20 @@ class LlmService {
           throw Exception(
               "Google API Key is missing. Please set it in Settings.");
         }
+        // Remove "models/" prefix if present (Google API returns "models/gemini-1.5-pro")
+        // Also handle old format (display names like "Gemini 1.5 Pro")
+        String modelName = _selectedModelName!;
+        if (modelName.startsWith('models/')) {
+          modelName = modelName.substring(7); // Remove "models/" prefix
+        } else if (!modelName.contains('-')) {
+          // Old format detected (e.g., "Gemini 1.5 Pro"), use default
+          modelName = 'gemini-2.5-flash';
+          debugPrint('⚠️ Old model format detected, using default: $modelName');
+        }
         return ChatGoogleGenerativeAI(
           apiKey: _apiKey!,
           defaultOptions: ChatGoogleGenerativeAIOptions(
-            model: _selectedModelName!,
+            model: modelName,
             temperature: 0.7,
           ),
         );
@@ -213,11 +242,56 @@ class LlmService {
   }
 
   // Streams the chat response from the LLM.
+  // Requests are queued and processed sequentially to avoid conflicts.
   Future<Stream<String>> streamChat(List<LlmMsg> messages,
       {int maxTokens = 2048}) async {
-    if (_isBusy) throw Exception("AI is already processing a request.");
-    _isBusy = true;
+    final completer = Completer<Stream<String>>();
+    
+    // Add request to queue.
+    _requestQueue.add(_QueuedRequest(
+      messages: messages,
+      maxTokens: maxTokens,
+      completer: completer,
+    ));
 
+    // Process queue if not already processing.
+    _processQueue();
+
+    return completer.future;
+  }
+
+  // Processes the request queue sequentially.
+  Future<void> _processQueue() async {
+    if (_isProcessing || _requestQueue.isEmpty) return;
+    
+    _isProcessing = true;
+
+    while (_requestQueue.isNotEmpty) {
+      final request = _requestQueue.removeFirst();
+      
+      try {
+        final stream = await _executeStreamChat(request.messages, request.maxTokens);
+        request.completer.complete(stream);
+      } catch (e) {
+        request.completer.completeError(e);
+      }
+
+      // Wait for the current stream to complete before processing next request.
+      if (request.completer.isCompleted) {
+        try {
+          final stream = await request.completer.future;
+          await stream.last.catchError((_) => ''); // Wait for stream completion
+        } catch (_) {
+          // Stream error already handled in completer
+        }
+      }
+    }
+
+    _isProcessing = false;
+  }
+
+  // Internal method that executes a single chat request.
+  Future<Stream<String>> _executeStreamChat(List<LlmMsg> messages, int maxTokens) async {
     final controller = StreamController<String>();
 
     try {
@@ -262,15 +336,12 @@ ${m.content}
         },
         onDone: () {
           controller.close();
-          _isBusy = false;
         },
         onError: (e) {
           if (!controller.isClosed) controller.addError(e);
-          _isBusy = false;
         },
       );
     } catch (e) {
-      _isBusy = false;
       if (!controller.isClosed) {
         controller.addError(e);
         controller.close();

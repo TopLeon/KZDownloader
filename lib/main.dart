@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kzdownloader/src/rust/frb_generated.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:kzdownloader/views/chat/screens/chat_screen.dart';
 import 'package:kzdownloader/core/utils/binary_manager.dart';
 import 'package:kzdownloader/core/services/settings_service.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:kzdownloader/core/theme/app_theme.dart';
 import 'package:kzdownloader/core/providers/theme_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -14,19 +14,21 @@ import 'package:kzdownloader/l10n/arb/app_localizations.dart';
 import 'package:kzdownloader/core/providers/locale_provider.dart';
 import 'package:kzdownloader/core/services/llm_service.dart';
 import 'package:kzdownloader/core/services/secure_storage_service.dart';
+import 'package:rhttp_plus/rhttp_plus.dart';
 
 // Entry point of the application.
-// Initializes bindings, Rust library, and window options.
+// Initializes bindings, HTTP client, and window options.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
   await BinaryManager().ensureInitialized();
+  JustAudioMediaKit.ensureInitialized(); // For windows
 
-  await RustLib.init();
+  await Rhttp.init();
 
   WindowOptions windowOptions = const WindowOptions(
-    size: Size(1120, 705),
-    minimumSize: Size(1120, 705),
+    size: Size(1220, 770),
+    minimumSize: Size(1220, 770),
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
@@ -108,7 +110,7 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
     });
   }
 
-  // Checks if a language has been selected. If not, shows the selection screen.
+  //Checks if a language has been selected. If not, shows the selection screen.
   Future<void> _checkLanguageAndInit() async {
     final settings = SettingsService();
     final lang = await settings.getLanguage();
@@ -757,7 +759,10 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
         ),
         child: Row(
           children: [
-            Text(flag, style: const TextStyle(fontSize: 28)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(flag, style: const TextStyle(fontSize: 28)),
+            ),
             const SizedBox(width: 16),
             Text(
               label,
@@ -843,7 +848,10 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
                       width: 2,
                     ),
                   ),
-                  prefixIcon: const Icon(Icons.vpn_key_rounded),
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Icon(Icons.vpn_key_rounded),
+                  ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 16,
@@ -981,7 +989,10 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
                       width: 2,
                     ),
                   ),
-                  prefixIcon: const Icon(Icons.vpn_key_rounded),
+                  prefixIcon: const Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Icon(Icons.vpn_key_rounded),
+                  ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 16,
@@ -991,6 +1002,7 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
               const SizedBox(height: 16),
               TextButton.icon(
                 onPressed: () async {
+                  // TODO
                   final uri =
                       Uri.parse('https://aistudio.google.com/app/apikey');
                   if (Platform.isMacOS) {
@@ -1124,7 +1136,7 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
             FilledButton.icon(
               onPressed: () async {
                 if (Platform.isMacOS) {
-                  await Process.run('open', ['https://ollama.com']);
+                  await Process.run('open', ['https:ollama.com']);
                 }
               },
               style: FilledButton.styleFrom(
@@ -1473,7 +1485,7 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
               ),
               const SizedBox(height: 28),
               Text(
-                "KzDownloader",
+                "KZDownloader",
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.5,

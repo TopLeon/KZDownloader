@@ -23,8 +23,8 @@ class WindowButton extends StatelessWidget {
               ? Colors.black.withOpacity(0.1)
               : Colors.white.withOpacity(0.1),
       child: Container(
-        width: 46,
-        height: 32,
+        width: 32,
+        height: 16,
         alignment: Alignment.center,
         child: Icon(
           icon,

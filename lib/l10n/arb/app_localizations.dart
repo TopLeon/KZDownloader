@@ -221,8 +221,14 @@ abstract class AppLocalizations {
   /// No description provided for @defaultFormat.
   ///
   /// In en, this message translates to:
-  /// **'Default Format'**
+  /// **'Default Video Format'**
   String get defaultFormat;
+
+  /// No description provided for @defaultAudioFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Default Audio Format'**
+  String get defaultAudioFormat;
 
   /// No description provided for @defaultQuality.
   ///
@@ -271,6 +277,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Best'**
   String get qualityBest;
+
+  /// No description provided for @qualityHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get qualityHigh;
+
+  /// No description provided for @qualityMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get qualityMedium;
 
   /// No description provided for @qualityLow.
   ///
@@ -593,7 +611,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionAudio.
   ///
   /// In en, this message translates to:
-  /// **'Audio'**
+  /// **'Music'**
   String get optionAudio;
 
   /// No description provided for @unknownError.
@@ -1139,7 +1157,7 @@ abstract class AppLocalizations {
   /// No description provided for @copyright.
   ///
   /// In en, this message translates to:
-  /// **'© 2026 KZDownloader. Open Source Project.'**
+  /// **'© 2026 KZDownloader by Le0nZ (github.com/topleon)'**
   String get copyright;
 
   /// No description provided for @eta.
@@ -1267,12 +1285,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Chat with Video'**
   String get chatWithVideo;
-
-  /// No description provided for @qualityMedium.
-  ///
-  /// In en, this message translates to:
-  /// **'Medium'**
-  String get qualityMedium;
 
   /// No description provided for @aiNotAvailableForNonYoutube.
   ///
@@ -1579,6 +1591,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Choose an interface theme'**
   String get settingsAppearanceSubtitle;
+
+  /// No description provided for @summaryAnimations.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary Animations'**
+  String get summaryAnimations;
+
+  /// No description provided for @summaryAnimationsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable animated text for summaries'**
+  String get summaryAnimationsSubtitle;
 
   /// No description provided for @settingsDataStorage.
   ///
@@ -2521,6 +2545,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'and'**
   String get and;
+
+  /// No description provided for @concurrentDownloadsGlobal.
+  ///
+  /// In en, this message translates to:
+  /// **'Concurrent Downloads (Global)'**
+  String get concurrentDownloadsGlobal;
+
+  /// No description provided for @concurrentDownloadsGlobalDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum number of files downloaded simultaneously'**
+  String get concurrentDownloadsGlobalDesc;
+
+  /// No description provided for @checksumLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Checksum (optional)'**
+  String get checksumLabel;
+
+  /// No description provided for @checksumHint.
+  ///
+  /// In en, this message translates to:
+  /// **'If you want paste MD5 or SHA256 hash...'**
+  String get checksumHint;
+
+  /// No description provided for @checksumAlgorithm.
+  ///
+  /// In en, this message translates to:
+  /// **'Algorithm'**
+  String get checksumAlgorithm;
+
+  /// No description provided for @checksumMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Checksum verified'**
+  String get checksumMatch;
+
+  /// No description provided for @checksumMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Checksum mismatch'**
+  String get checksumMismatch;
+
+  /// No description provided for @checksumVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying checksum...'**
+  String get checksumVerifying;
+
+  /// No description provided for @checksumError.
+  ///
+  /// In en, this message translates to:
+  /// **'Checksum error'**
+  String get checksumError;
+
+  /// No description provided for @linkExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Link expired (403)'**
+  String get linkExpired;
+
+  /// No description provided for @linkExpiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The download link has expired. Please provide a new URL to resume.'**
+  String get linkExpiredMessage;
+
+  /// No description provided for @updateUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Update URL'**
+  String get updateUrl;
+
+  /// No description provided for @updateUrlTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update Download URL'**
+  String get updateUrlTitle;
+
+  /// No description provided for @updateUrlContent.
+  ///
+  /// In en, this message translates to:
+  /// **'The download link has expired. Paste a new URL to resume the download from where it left off.'**
+  String get updateUrlContent;
+
+  /// No description provided for @updateUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste new URL...'**
+  String get updateUrlHint;
+
+  /// No description provided for @diskSpaceFree.
+  ///
+  /// In en, this message translates to:
+  /// **'{space} free'**
+  String diskSpaceFree(String space);
+
+  /// No description provided for @insufficientDiskSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient disk space'**
+  String insufficientDiskSpace(String available, String required);
+
+  /// No description provided for @cancelDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancelDownload;
+
+  /// No description provided for @cancelDownloadTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Download'**
+  String get cancelDownloadTooltip;
+
+  /// No description provided for @queued.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get queued;
+
+  /// No description provided for @diskSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Disk Space'**
+  String get diskSpace;
 }
 
 class _AppLocalizationsDelegate

@@ -46,7 +46,8 @@ class _StyledLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Text(
         label,
-        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        style:
+            GoogleFonts.montserrat(fontWeight: FontWeight.w500, fontSize: 13),
       ),
     );
   }
@@ -67,6 +68,8 @@ class _OllamaModelSelectorState extends ConsumerState<OllamaModelSelector> {
   String _currentProvider = 'ollama';
   final TextEditingController _apiKeyController = TextEditingController();
   bool _obscureApiKey = true;
+  final SettingsService _settingsService = SettingsService();
+  int _maxCharactersForAI = 25000;
 
   @override
   void initState() {
@@ -77,6 +80,7 @@ class _OllamaModelSelectorState extends ConsumerState<OllamaModelSelector> {
   Future<void> _initData() async {
     final settings = ref.read(settingsServiceProvider);
     final provider = await settings.getAiProvider();
+    final maxChars = await _settingsService.getMaxCharactersForAI();
 
     String? apiKey;
     if (provider == 'openai') {
@@ -93,6 +97,7 @@ class _OllamaModelSelectorState extends ConsumerState<OllamaModelSelector> {
 
     setState(() {
       _currentProvider = provider;
+      _maxCharactersForAI = maxChars;
     });
 
     _configureLlmService(provider, apiKey);
@@ -171,256 +176,397 @@ class _OllamaModelSelectorState extends ConsumerState<OllamaModelSelector> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _StyledLabel(l10n.aiProvider),
-              CustomDropdown<String>(
-                decoration: CustomDropdownDecoration(
-                    closedFillColor:
-                        colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                    expandedFillColor: colorScheme.surface,
-                    closedBorder: Border.all(
-                        color: colorScheme.outlineVariant.withOpacity(0.5)),
-                    expandedBorder: Border.all(
-                        color: colorScheme.primary.withOpacity(0.15)),
-                    closedBorderRadius: BorderRadius.circular(8),
-                    expandedBorderRadius: BorderRadius.circular(8),
-                    listItemDecoration: ListItemDecoration(
-                      splashColor: colorScheme.primary.withOpacity(0.05),
-                      highlightColor: colorScheme.primary.withOpacity(0.05),
-                    )),
-                items: [
-                  l10n.aiProviderOllama,
-                  l10n.aiProviderOpenAI,
-                  l10n.aiProviderGoogle,
-                ],
-                headerBuilder: (context, selectedItem, enabled) {
-                  FIconObject icon;
-                  if (selectedItem == l10n.aiProviderOllama) {
-                    icon = RI.RiChatAiFill;
-                  } else if (selectedItem == l10n.aiProviderOpenAI) {
-                    icon = RI.RiOpenaiFill;
-                  } else {
-                    icon = RI.RiGeminiFill;
-                  }
-                  return Row(
-                    children: [
-                      FIcon(icon),
-                      const SizedBox(width: 8),
-                      Text(selectedItem)
-                    ],
-                  );
-                },
-                listItemBuilder: (context, item, isSelected, onItemSelect) {
-                  FIconObject icon;
-                  if (item == l10n.aiProviderOllama) {
-                    icon = RI.RiChatAiLine;
-                  } else if (item == l10n.aiProviderOpenAI) {
-                    icon = RI.RiOpenaiLine;
-                  } else {
-                    icon = RI.RiGeminiLine;
-                  }
-                  return Row(
-                    children: [
-                      FIcon(icon),
-                      const SizedBox(width: 8),
-                      Text(item)
-                    ],
-                  );
-                },
-                initialItem: _currentProvider == 'ollama'
-                    ? l10n.aiProviderOllama
-                    : _currentProvider == 'openai'
-                        ? l10n.aiProviderOpenAI
-                        : l10n.aiProviderGoogle,
-                onChanged: (val) async {
-                  if (val != null) {
-                    final providerValue = val == l10n.aiProviderOllama
-                        ? 'ollama'
-                        : val == l10n.aiProviderOpenAI
-                            ? 'openai'
-                            : 'google';
-                    setState(() {
-                      _currentProvider = providerValue;
-                    });
-                    await settingsService.setAiProvider(providerValue);
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _StyledLabel(l10n.aiProvider),
+                        CustomDropdown<String>(
+                          decoration: CustomDropdownDecoration(
+                              closedFillColor: colorScheme
+                                  .surfaceContainerHighest
+                                  .withOpacity(0.3),
+                              expandedFillColor: colorScheme.surface,
+                              closedBorder: Border.all(
+                                  color: colorScheme.outlineVariant
+                                      .withOpacity(0.5)),
+                              expandedBorder: Border.all(
+                                  color: colorScheme.primary.withOpacity(0.15)),
+                              closedBorderRadius: BorderRadius.circular(8),
+                              expandedBorderRadius: BorderRadius.circular(8),
+                              listItemDecoration: ListItemDecoration(
+                                splashColor:
+                                    colorScheme.primary.withOpacity(0.05),
+                                highlightColor:
+                                    colorScheme.primary.withOpacity(0.05),
+                              )),
+                          items: [
+                            l10n.aiProviderOllama,
+                            l10n.aiProviderOpenAI,
+                            l10n.aiProviderGoogle,
+                          ],
+                          headerBuilder: (context, selectedItem, enabled) {
+                            FIconObject icon;
+                            if (selectedItem == l10n.aiProviderOllama) {
+                              icon = RI.RiChatAiFill;
+                            } else if (selectedItem == l10n.aiProviderOpenAI) {
+                              icon = RI.RiOpenaiFill;
+                            } else {
+                              icon = RI.RiGeminiFill;
+                            }
+                            return Row(
+                              children: [
+                                FIcon(icon),
+                                const SizedBox(width: 8),
+                                Text(selectedItem)
+                              ],
+                            );
+                          },
+                          listItemBuilder:
+                              (context, item, isSelected, onItemSelect) {
+                            FIconObject icon;
+                            if (item == l10n.aiProviderOllama) {
+                              icon = RI.RiChatAiLine;
+                            } else if (item == l10n.aiProviderOpenAI) {
+                              icon = RI.RiOpenaiLine;
+                            } else {
+                              icon = RI.RiGeminiLine;
+                            }
+                            return Row(
+                              children: [
+                                FIcon(icon),
+                                const SizedBox(width: 8),
+                                Text(item)
+                              ],
+                            );
+                          },
+                          initialItem: _currentProvider == 'ollama'
+                              ? l10n.aiProviderOllama
+                              : _currentProvider == 'openai'
+                                  ? l10n.aiProviderOpenAI
+                                  : l10n.aiProviderGoogle,
+                          onChanged: (val) async {
+                            if (val != null) {
+                              final providerValue = val == l10n.aiProviderOllama
+                                  ? 'ollama'
+                                  : val == l10n.aiProviderOpenAI
+                                      ? 'openai'
+                                      : 'google';
+                              setState(() {
+                                _currentProvider = providerValue;
+                              });
+                              await settingsService
+                                  .setAiProvider(providerValue);
 
-                    String? apiKey;
-                    if (providerValue == 'openai') {
-                      apiKey = await ref
-                          .read(secureStorageServiceProvider)
-                          .readSecureData(StorageKeys.openAiApiKey);
-                      _apiKeyController.text = apiKey ?? '';
-                    } else if (providerValue == 'google') {
-                      apiKey = await ref
-                          .read(secureStorageServiceProvider)
-                          .readSecureData(StorageKeys.googleApiKey);
-                      _apiKeyController.text = apiKey ?? '';
-                    }
+                              String? apiKey;
+                              if (providerValue == 'openai') {
+                                apiKey = await ref
+                                    .read(secureStorageServiceProvider)
+                                    .readSecureData(StorageKeys.openAiApiKey);
+                                _apiKeyController.text = apiKey ?? '';
+                              } else if (providerValue == 'google') {
+                                apiKey = await ref
+                                    .read(secureStorageServiceProvider)
+                                    .readSecureData(StorageKeys.googleApiKey);
+                                _apiKeyController.text = apiKey ?? '';
+                              }
 
-                    _configureLlmService(providerValue, apiKey);
-                    _loadModels(providerValue);
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              if (_currentProvider == 'openai' ||
-                  _currentProvider == 'google') ...[
-                _StyledLabel(_currentProvider == 'openai'
-                    ? l10n.openAiApiKey
-                    : l10n.googleAiApiKey),
-                _StyledInputContainer(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 12),
-                          child: TextField(
-                            controller: _apiKeyController,
-                            obscureText: _obscureApiKey,
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              hintText: _currentProvider == 'openai'
-                                  ? l10n.openAiApiKeyHint
-                                  : l10n.googleAiApiKeyHint,
-                            ),
-                          ),
+                              _configureLlmService(providerValue, apiKey);
+                              _loadModels(providerValue);
+                            }
+                          },
                         ),
-                      ),
-                      IconButton(
-                        icon: Icon(_obscureApiKey
-                            ? Icons.visibility
-                            : Icons.visibility_off),
-                        onPressed: () =>
-                            setState(() => _obscureApiKey = !_obscureApiKey),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.save),
-                        onPressed: _saveApiKey,
-                      )
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              _StyledLabel(l10n.selectModel),
-              if (_loading)
-                const Center(child: LinearProgressIndicator(minHeight: 2))
-              else if (_error != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                      color: colorScheme.errorContainer.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(8)),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error, color: colorScheme.error),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: Text(_error!,
-                              style: const TextStyle(fontSize: 12))),
-                      IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed: () => _loadModels(_currentProvider))
-                    ],
-                  ),
-                )
-              else if (_models.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8)),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(l10n.noModelsFound)),
-                      IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed: () => _loadModels(_currentProvider))
-                    ],
-                  ),
-                )
-              else
-                CustomDropdown<OllamaModelInfo>(
-                  decoration: CustomDropdownDecoration(
-                      closedFillColor:
-                          colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                      expandedFillColor: colorScheme.surface,
-                      closedBorder: Border.all(
-                          color: colorScheme.outlineVariant.withOpacity(0.5)),
-                      expandedBorder: Border.all(
-                          color: colorScheme.primary.withOpacity(0.15)),
-                      closedBorderRadius: BorderRadius.circular(8),
-                      expandedBorderRadius: BorderRadius.circular(8),
-                      listItemDecoration: ListItemDecoration(
-                        splashColor: colorScheme.primary.withOpacity(0.05),
-                        highlightColor: colorScheme.primary.withOpacity(0.05),
-                      )),
-                  hintText: l10n.selectModel,
-                  items: _models,
-                  initialItem: _models.any((m) => m.name == asyncSnapshot.data)
-                      ? _models.firstWhere((m) => m.name == asyncSnapshot.data)
-                      : null,
-                  listItemBuilder: (context, item, isSelected, onItemSelect) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  const SizedBox(width: 16),
+                  if (_currentProvider == 'openai' ||
+                      _currentProvider == 'google')
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              item.name,
-                              style: GoogleFonts.notoSans(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: isSelected ? colorScheme.primary : null,
-                              ),
+                          _StyledLabel(_currentProvider == 'openai'
+                              ? l10n.openAiApiKey
+                              : l10n.googleAiApiKey),
+                          _StyledInputContainer(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(left: 12),
+                                    child: TextField(
+                                      controller: _apiKeyController,
+                                      obscureText: _obscureApiKey,
+                                      decoration: InputDecoration(
+                                        border: InputBorder.none,
+                                        hintText: _currentProvider == 'openai'
+                                            ? l10n.openAiApiKeyHint
+                                            : l10n.googleAiApiKeyHint,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: FIcon(
+                                    _obscureApiKey
+                                        ? RI.RiEyeLine
+                                        : RI.RiEyeOffLine,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    size: 20,
+                                  ),
+                                  onPressed: () => setState(
+                                      () => _obscureApiKey = !_obscureApiKey),
+                                ),
+                                IconButton(
+                                  icon: FIcon(
+                                    RI.RiSaveLine,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    size: 20,
+                                  ),
+                                  onPressed: _saveApiKey,
+                                ),
+                                const SizedBox(width: 8),
+                              ],
                             ),
                           ),
-                          if (item.size != '-')
-                            Text(
-                              item.size,
-                              style: GoogleFonts.notoSans(
-                                fontSize: 12,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
                         ],
                       ),
-                    );
-                  },
-                  headerBuilder: (context, selectedItem, c) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    )
+                  else
+                    const Spacer(flex: 2),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            selectedItem.name,
-                            style: GoogleFonts.notoSans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
+                        _StyledLabel(l10n.selectModel),
+                        if (_loading)
+                          const Center(
+                              child: LinearProgressIndicator(minHeight: 2))
+                        else if (_error != null)
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                                color:
+                                    colorScheme.errorContainer.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(8)),
+                            child: Row(
+                              children: [
+                                Icon(Icons.error, color: colorScheme.error),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                    child: Text(_error!,
+                                        style: const TextStyle(fontSize: 13))),
+                                IconButton(
+                                    icon: const Icon(Icons.refresh),
+                                    onPressed: () =>
+                                        _loadModels(_currentProvider))
+                              ],
                             ),
-                          ),
-                        ),
-                        if (selectedItem.size != '-')
-                          Text(
-                            selectedItem.size,
-                            style: GoogleFonts.notoSans(
-                              fontSize: 12,
-                              color: colorScheme.onSurfaceVariant,
+                          )
+                        else if (_models.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(8)),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.info_outline),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(l10n.noModelsFound)),
+                                IconButton(
+                                    icon: const Icon(Icons.refresh),
+                                    onPressed: () =>
+                                        _loadModels(_currentProvider))
+                              ],
                             ),
+                          )
+                        else
+                          CustomDropdown<OllamaModelInfo>(
+                            decoration: CustomDropdownDecoration(
+                                closedFillColor: colorScheme
+                                    .surfaceContainerHighest
+                                    .withOpacity(0.3),
+                                expandedFillColor: colorScheme.surface,
+                                closedBorder: Border.all(
+                                    color: colorScheme.outlineVariant
+                                        .withOpacity(0.5)),
+                                expandedBorder: Border.all(
+                                    color:
+                                        colorScheme.primary.withOpacity(0.15)),
+                                closedBorderRadius: BorderRadius.circular(8),
+                                expandedBorderRadius: BorderRadius.circular(8),
+                                listItemDecoration: ListItemDecoration(
+                                  splashColor:
+                                      colorScheme.primary.withOpacity(0.05),
+                                  highlightColor:
+                                      colorScheme.primary.withOpacity(0.05),
+                                )),
+                            hintText: l10n.selectModel,
+                            items: _models,
+                            initialItem:
+                                _models.any((m) => m.name == asyncSnapshot.data)
+                                    ? _models.firstWhere(
+                                        (m) => m.name == asyncSnapshot.data)
+                                    : null,
+                            listItemBuilder:
+                                (context, item, isSelected, onItemSelect) {
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 0),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item.details,
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: isSelected
+                                              ? colorScheme.primary
+                                              : null,
+                                        ),
+                                      ),
+                                    ),
+                                    if (item.size != '-')
+                                      Text(
+                                        item.size,
+                                        style: GoogleFonts.montserrat(
+                                          fontSize: 13,
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
+                            headerBuilder: (context, selectedItem, c) {
+                              return Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      selectedItem.details,
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  if (selectedItem.size != '-')
+                                    Text(
+                                      selectedItem.size,
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 13,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                            onChanged: (val) {
+                              if (val != null) {
+                                ref
+                                    .read(settingsServiceProvider)
+                                    .setAiModel(val.name);
+                                LlmService().setModel(val.name);
+                                setState(() {});
+                              }
+                            },
                           ),
                       ],
-                    );
-                  },
-                  onChanged: (val) {
-                    if (val != null) {
-                      ref.read(settingsServiceProvider).setAiModel(val.name);
-                      LlmService().setModel(val.name);
-                      setState(() {});
-                    }
-                  },
-                ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _StyledLabel(l10n.maxCharactersForAI),
+                        CustomDropdown<int>(
+                          decoration: CustomDropdownDecoration(
+                              closedFillColor: colorScheme
+                                  .surfaceContainerHighest
+                                  .withOpacity(0.3),
+                              expandedFillColor: colorScheme.surface,
+                              closedBorder: Border.all(
+                                  color: colorScheme.outlineVariant
+                                      .withOpacity(0.5)),
+                              expandedBorder: Border.all(
+                                  color: colorScheme.primary.withOpacity(0.15)),
+                              closedBorderRadius: BorderRadius.circular(8),
+                              expandedBorderRadius: BorderRadius.circular(8),
+                              listItemDecoration: ListItemDecoration(
+                                splashColor:
+                                    colorScheme.primary.withOpacity(0.05),
+                                highlightColor:
+                                    colorScheme.primary.withOpacity(0.05),
+                              )),
+                          items: const [5000, 25000, 50000, 75000, 100000],
+                          initialItem: _maxCharactersForAI,
+                          headerBuilder: (context, selectedItem, c) {
+                            return Row(
+                              children: [
+                                const FIcon(RI.RiText, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${(selectedItem / 1000).toStringAsFixed(0)}k',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                          listItemBuilder:
+                              (context, item, isSelected, onItemSelect) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 0),
+                              child: Text(
+                                '${(item / 1000).toStringAsFixed(0)}k',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      isSelected ? colorScheme.primary : null,
+                                ),
+                              ),
+                            );
+                          },
+                          onChanged: (newValue) {
+                            if (newValue != null) {
+                              setState(() => _maxCharactersForAI = newValue);
+                              _settingsService.setMaxCharactersForAI(newValue);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Spacer(),
+                ],
+              ),
             ],
           );
         });
@@ -437,8 +583,11 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _downloadPath;
   DownloadFormat _format = DownloadFormat.mp4;
+  DownloadFormat _audioFormat = DownloadFormat.mp3;
   int _maxConcurrentDownloads = 3;
-  int _maxCharactersForAI = 25000;
+  int _maxConcurrentGlobalDownloads = 3;
+
+  bool _summaryAnimationsEnabled = true;
   final SettingsService _settingsService = SettingsService();
 
   @override
@@ -450,14 +599,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _loadSettings() async {
     final path = await _settingsService.getDownloadPath();
     final format = await _settingsService.getDefaultFormat();
+    final audioFormat = await _settingsService.getDefaultAudioFormat();
     final maxConcurrent = await _settingsService.getMaxConcurrentDownloads();
-    final maxChars = await _settingsService.getMaxCharactersForAI();
+    final summaryAnimations =
+        await _settingsService.getSummaryAnimationsEnabled();
+    final maxConcurrentGlobal =
+        await _settingsService.getMaxConcurrentGlobalDownloads();
     if (mounted) {
       setState(() {
         _downloadPath = path;
         _format = format;
+        _audioFormat = audioFormat;
         _maxConcurrentDownloads = maxConcurrent;
-        _maxCharactersForAI = maxChars;
+        _maxConcurrentGlobalDownloads = maxConcurrentGlobal;
+        _summaryAnimationsEnabled = summaryAnimations;
       });
     }
   }
@@ -484,8 +639,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       cancelText: l10n.btnCancel,
       onConfirm: () {
         ref.read(downloadListProvider.notifier).clearHistory();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(l10n.historyCleared)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l10n.historyCleared),
+            width: 200,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8))));
       },
     );
   }
@@ -559,7 +718,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Text(
                 l10n.downloadPathDescription,
                 style: TextStyle(
-                    fontSize: 11, color: colorScheme.onSurfaceVariant),
+                    fontSize: 13, color: colorScheme.onSurfaceVariant),
               ),
 
               const SizedBox(height: 20),
@@ -573,16 +732,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     children: [
                       Text(
                         l10n.qualityMode,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 13),
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w500, fontSize: 13),
                       ),
-                      const SizedBox(height: 4),
                       Text(
                         qualitySettings.mode == QualityMode.simple
                             ? l10n.qualityModeSimple
                             : l10n.qualityModeExpert,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 13,
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -605,8 +763,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             final currentQuality = qualitySettings.quality;
                             // Convert expert qualities to simple equivalents
                             DownloadQuality newQuality;
-                            if (currentQuality == DownloadQuality.p1080) {
+                            if (currentQuality == DownloadQuality.p1440 ||
+                                currentQuality == DownloadQuality.p2160) {
                               newQuality = DownloadQuality.best;
+                            } else if (currentQuality ==
+                                DownloadQuality.p1080) {
+                              newQuality = DownloadQuality.high;
                             } else if (currentQuality == DownloadQuality.p720) {
                               newQuality = DownloadQuality.medium;
                             } else if (currentQuality == DownloadQuality.p480) {
@@ -631,9 +793,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                             child: Text(
                               l10n.qualityModeSimple,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                                 color:
                                     qualitySettings.mode == QualityMode.simple
                                         ? colorScheme.onPrimary
@@ -648,6 +810,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             // Convert simple qualities to expert equivalents
                             DownloadQuality newQuality;
                             if (currentQuality == DownloadQuality.best) {
+                              newQuality = DownloadQuality.p2160;
+                            } else if (currentQuality == DownloadQuality.high) {
                               newQuality = DownloadQuality.p1080;
                             } else if (currentQuality ==
                                 DownloadQuality.medium) {
@@ -674,9 +838,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                             child: Text(
                               l10n.qualityModeExpert,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                                 color:
                                     qualitySettings.mode == QualityMode.expert
                                         ? colorScheme.onPrimary
@@ -723,7 +887,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           items: DownloadFormat.values
                               .where((x) =>
                                   x != DownloadFormat.mp3 &&
-                                  x != DownloadFormat.m4a)
+                                  x != DownloadFormat.m4a &&
+                                  x != DownloadFormat.ogg)
                               .toList(),
                           initialItem: _format,
                           headerBuilder: (context, selectedItem, c) {
@@ -733,7 +898,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 const SizedBox(width: 8),
                                 Text(
                                   selectedItem.name.toUpperCase(),
-                                  style: GoogleFonts.notoSans(
+                                  style: GoogleFonts.montserrat(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -747,7 +912,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 0),
                               child: Text(
                                 item.name.toUpperCase(),
-                                style: GoogleFonts.notoSans(
+                                style: GoogleFonts.montserrat(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                   color:
@@ -760,6 +925,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             if (newValue != null) {
                               setState(() => _format = newValue);
                               _settingsService.setDefaultFormat(newValue);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _StyledLabel(l10n.defaultAudioFormat),
+                        CustomDropdown<DownloadFormat>(
+                          decoration: CustomDropdownDecoration(
+                              closedFillColor: colorScheme
+                                  .surfaceContainerHighest
+                                  .withOpacity(0.3),
+                              expandedFillColor: colorScheme.surface,
+                              closedBorder: Border.all(
+                                  color: colorScheme.outlineVariant
+                                      .withOpacity(0.5)),
+                              expandedBorder: Border.all(
+                                  color: colorScheme.primary.withOpacity(0.15)),
+                              closedBorderRadius: BorderRadius.circular(8),
+                              expandedBorderRadius: BorderRadius.circular(8),
+                              listItemDecoration: ListItemDecoration(
+                                splashColor:
+                                    colorScheme.primary.withOpacity(0.05),
+                                highlightColor:
+                                    colorScheme.primary.withOpacity(0.05),
+                              )),
+                          items: DownloadFormat.values
+                              .where((x) =>
+                                  x == DownloadFormat.mp3 ||
+                                  x == DownloadFormat.m4a ||
+                                  x == DownloadFormat.ogg)
+                              .toList(),
+                          initialItem: _audioFormat,
+                          headerBuilder: (context, selectedItem, c) {
+                            return Row(
+                              children: [
+                                const FIcon(RI.RiMusicFill, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  selectedItem.name.toUpperCase(),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                          listItemBuilder:
+                              (context, item, isSelected, onItemSelect) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 0),
+                              child: Text(
+                                item.name.toUpperCase(),
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      isSelected ? colorScheme.primary : null,
+                                ),
+                              ),
+                            );
+                          },
+                          onChanged: (newValue) {
+                            if (newValue != null) {
+                              setState(() => _audioFormat = newValue);
+                              _settingsService.setDefaultAudioFormat(newValue);
                             }
                           },
                         ),
@@ -795,21 +1032,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 )),
                             items: const [
                               DownloadQuality.best,
+                              DownloadQuality.high,
                               DownloadQuality.medium,
                               DownloadQuality.low
                             ],
                             initialItem: qualitySettings.quality ==
+                                        DownloadQuality.p2160 ||
+                                    qualitySettings.quality ==
+                                        DownloadQuality.p1440 ||
+                                    qualitySettings.quality ==
                                         DownloadQuality.p1080 ||
                                     qualitySettings.quality ==
                                         DownloadQuality.p720 ||
                                     qualitySettings.quality ==
                                         DownloadQuality.p480
-                                ? DownloadQuality.best
+                                ? (qualitySettings.quality ==
+                                            DownloadQuality.p2160 ||
+                                        qualitySettings.quality ==
+                                            DownloadQuality.p1440
+                                    ? DownloadQuality.best
+                                    : qualitySettings.quality ==
+                                            DownloadQuality.p1080
+                                        ? DownloadQuality.high
+                                        : qualitySettings.quality ==
+                                                DownloadQuality.p720
+                                            ? DownloadQuality.medium
+                                            : DownloadQuality.low)
                                 : qualitySettings.quality,
                             headerBuilder: (context, selectedItem, c) {
                               String displayText;
                               if (selectedItem == DownloadQuality.best) {
                                 displayText = l10n.qualityBest;
+                              } else if (selectedItem == DownloadQuality.high) {
+                                displayText = l10n.qualityHigh;
                               } else if (selectedItem ==
                                   DownloadQuality.medium) {
                                 displayText = l10n.qualityMedium;
@@ -822,7 +1077,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   const SizedBox(width: 8),
                                   Text(
                                     displayText,
-                                    style: GoogleFonts.notoSans(
+                                    style: GoogleFonts.montserrat(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -835,6 +1090,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               String displayText;
                               if (item == DownloadQuality.best) {
                                 displayText = l10n.qualityBest;
+                              } else if (item == DownloadQuality.high) {
+                                displayText = l10n.qualityHigh;
                               } else if (item == DownloadQuality.medium) {
                                 displayText = l10n.qualityMedium;
                               } else {
@@ -845,7 +1102,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     const EdgeInsets.symmetric(vertical: 0),
                                 child: Text(
                                   displayText,
-                                  style: GoogleFonts.notoSans(
+                                  style: GoogleFonts.montserrat(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
                                     color:
@@ -884,20 +1141,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                       colorScheme.primary.withOpacity(0.05),
                                 )),
                             items: const [
+                              DownloadQuality.p2160,
+                              DownloadQuality.p1440,
                               DownloadQuality.p1080,
                               DownloadQuality.p720,
                               DownloadQuality.p480
                             ],
                             initialItem:
                                 qualitySettings.quality == DownloadQuality.best
-                                    ? DownloadQuality.p1080
+                                    ? DownloadQuality.p2160
                                     : qualitySettings.quality ==
-                                            DownloadQuality.medium
-                                        ? DownloadQuality.p720
+                                            DownloadQuality.high
+                                        ? DownloadQuality.p1080
                                         : qualitySettings.quality ==
-                                                DownloadQuality.low
-                                            ? DownloadQuality.p480
-                                            : qualitySettings.quality,
+                                                DownloadQuality.medium
+                                            ? DownloadQuality.p720
+                                            : qualitySettings.quality ==
+                                                    DownloadQuality.low
+                                                ? DownloadQuality.p480
+                                                : qualitySettings.quality,
                             headerBuilder: (context, selectedItem, c) {
                               return Row(
                                 children: [
@@ -907,7 +1169,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     selectedItem.name
                                         .replaceAll('p', '')
                                         .toUpperCase(),
-                                    style: GoogleFonts.notoSans(
+                                    style: GoogleFonts.montserrat(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -922,7 +1184,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     const EdgeInsets.symmetric(vertical: 0),
                                 child: Text(
                                   item.name.replaceAll('p', '').toUpperCase(),
-                                  style: GoogleFonts.notoSans(
+                                  style: GoogleFonts.montserrat(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
                                     color:
@@ -945,7 +1207,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
               // Settings Row
               Row(
@@ -983,9 +1245,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 const SizedBox(width: 8),
                                 Text(
                                   '$selectedItem',
-                                  style: GoogleFonts.notoSans(
+                                  style: GoogleFonts.montserrat(
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],
@@ -997,9 +1259,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 0),
                               child: Text(
                                 '$item',
-                                style: GoogleFonts.notoSans(
+                                style: GoogleFonts.montserrat(
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                   color:
                                       isSelected ? colorScheme.primary : null,
                                 ),
@@ -1023,7 +1285,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _StyledLabel(l10n.maxCharactersForAI),
+                        _StyledLabel(l10n.concurrentDownloadsGlobal),
                         CustomDropdown<int>(
                           decoration: CustomDropdownDecoration(
                               closedFillColor: colorScheme
@@ -1043,18 +1305,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 highlightColor:
                                     colorScheme.primary.withOpacity(0.05),
                               )),
-                          items: const [5000, 25000, 50000, 75000, 100000],
-                          initialItem: _maxCharactersForAI,
+                          items: const [1, 2, 3, 4, 5, 6, 8, 10],
+                          initialItem: _maxConcurrentGlobalDownloads,
                           headerBuilder: (context, selectedItem, c) {
                             return Row(
                               children: [
-                                const FIcon(RI.RiText, size: 16),
+                                const FIcon(RI.RiDownloadFill, size: 16),
                                 const SizedBox(width: 8),
                                 Text(
-                                  '${(selectedItem / 1000).toStringAsFixed(0)}k',
-                                  style: GoogleFonts.notoSans(
+                                  '$selectedItem',
+                                  style: GoogleFonts.montserrat(
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],
@@ -1065,10 +1327,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 0),
                               child: Text(
-                                '${(item / 1000).toStringAsFixed(0)}k',
-                                style: GoogleFonts.notoSans(
+                                '$item',
+                                style: GoogleFonts.montserrat(
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                   color:
                                       isSelected ? colorScheme.primary : null,
                                 ),
@@ -1077,8 +1339,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           },
                           onChanged: (newValue) {
                             if (newValue != null) {
-                              setState(() => _maxCharactersForAI = newValue);
-                              _settingsService.setMaxCharactersForAI(newValue);
+                              setState(() =>
+                                  _maxConcurrentGlobalDownloads = newValue);
+                              _settingsService
+                                  .setMaxConcurrentGlobalDownloads(newValue);
                             }
                           },
                         ),
@@ -1121,7 +1385,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 const SizedBox(width: 8),
                                 Text(
                                   selectedItem,
-                                  style: GoogleFonts.notoSans(
+                                  style: GoogleFonts.montserrat(
                                       fontWeight: FontWeight.w500),
                                 ),
                               ],
@@ -1133,8 +1397,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 0),
                               child: Text(
                                 item,
-                                style: GoogleFonts.notoSans(
-                                  fontWeight: FontWeight.w500,
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w400,
                                   color:
                                       isSelected ? colorScheme.primary : null,
                                 ),
@@ -1168,7 +1432,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: l10n.settingsAppearance, icon: Icons.palette),
               const SizedBox(height: 8),
 
-              _StyledLabel(l10n.theme),
+              // _StyledLabel(l10n.theme),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -1183,12 +1447,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(l10n.selectThemeTitle,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 14)),
-                        const SizedBox(height: 4),
+                            style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w500, fontSize: 13)),
                         Text(l10n.settingsAppearanceSubtitle,
-                            style: TextStyle(
-                                fontSize: 12,
+                            style: GoogleFonts.montserrat(
+                                fontSize: 13,
                                 color: colorScheme.onSurfaceVariant)),
                       ],
                     ),
@@ -1204,7 +1467,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           _ThemeButton(
-                            icon: Icons.brightness_auto,
+                            icon: RI.RiMagicLine,
                             mode: ThemeMode.system,
                             current: ref.watch(themeProvider).asData?.value ??
                                 ThemeMode.system,
@@ -1214,7 +1477,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           const SizedBox(width: 4),
                           _ThemeButton(
-                            icon: Icons.light_mode,
+                            icon: RI.RiSunLine,
                             mode: ThemeMode.light,
                             current: ref.watch(themeProvider).asData?.value ??
                                 ThemeMode.system,
@@ -1224,7 +1487,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           const SizedBox(width: 4),
                           _ThemeButton(
-                            icon: Icons.dark_mode,
+                            icon: RI.RiMoonLine,
                             mode: ThemeMode.dark,
                             current: ref.watch(themeProvider).asData?.value ??
                                 ThemeMode.system,
@@ -1235,6 +1498,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                       ),
                     )
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Summary Animations Toggle
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: colorScheme.outlineVariant.withOpacity(0.5))),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(l10n.summaryAnimations,
+                              style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w500, fontSize: 13)),
+                          Text(l10n.summaryAnimationsSubtitle,
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  color: colorScheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value: _summaryAnimationsEnabled,
+                        onChanged: (value) async {
+                          await _settingsService
+                              .setSummaryAnimationsEnabled(value);
+                          setState(() {
+                            _summaryAnimationsEnabled = value;
+                          });
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1251,14 +1558,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: colorScheme.errorContainer.withOpacity(0.1),
+                    color: colorScheme.errorContainer.withOpacity(
+                        Theme.of(context).brightness == Brightness.dark
+                            ? 0.1
+                            : 0.2),
                     borderRadius: BorderRadius.circular(16),
                     border:
                         Border.all(color: colorScheme.error.withOpacity(0.3)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.delete_outline, color: colorScheme.error),
+                      FIcon(
+                        RI.RiDeleteBinLine,
+                        color: colorScheme.error,
+                        size: 20,
+                      ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
@@ -1266,16 +1580,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           children: [
                             Text(
                               l10n.clearDownloadHistory,
-                              style: TextStyle(
+                              style: GoogleFonts.montserrat(
                                 color: colorScheme.error,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                             Text(
                               l10n.clearDownloadHistorySubtitle,
-                              style: TextStyle(
+                              style: GoogleFonts.montserrat(
                                 color: colorScheme.error.withOpacity(0.7),
-                                fontSize: 12,
+                                fontSize: 13,
                               ),
                             ),
                           ],
@@ -1298,7 +1612,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       l10n.versionInfo,
                       style: TextStyle(
                         color: colorScheme.onSurfaceVariant.withOpacity(0.6),
-                        fontSize: 12,
+                        fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -1306,7 +1620,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       l10n.copyright,
                       style: TextStyle(
                         color: colorScheme.onSurfaceVariant.withOpacity(0.4),
-                        fontSize: 11,
+                        fontSize: 13,
                       ),
                     ),
                   ],
@@ -1316,9 +1630,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         )
       ]),
-      loading: () => Column(children: [
-        const CategoryHeader(category: TaskCategory.settings),
-        const Expanded(child: Center(child: CircularProgressIndicator())),
+      loading: () => const Column(children: [
+        CategoryHeader(category: TaskCategory.settings),
+        Expanded(child: Center(child: CircularProgressIndicator())),
       ]),
       error: (error, stack) => Column(children: [
         const CategoryHeader(category: TaskCategory.settings),
@@ -1329,7 +1643,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 }
 
 class _ThemeButton extends StatelessWidget {
-  final IconData icon;
+  final FIconObject icon;
   final ThemeMode mode;
   final ThemeMode current;
   final Function(ThemeMode) onTap;
@@ -1358,7 +1672,7 @@ class _ThemeButton extends StatelessWidget {
               ? Border.all(color: colorScheme.primary.withOpacity(0.15))
               : null,
         ),
-        child: Icon(
+        child: FIcon(
           icon,
           size: 20,
           color:

@@ -4,17 +4,15 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:kzdownloader/core/utils/binary_manager.dart';
 import 'package:kzdownloader/core/services/settings_service.dart';
-import 'package:kzdownloader/core/download/logic/youtube_transcript_helper.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
-// Service responsible for handling yt-dlp operations and metadata retrieval.
+// Handles yt-dlp operations: metadata retrieval, subtitle extraction, and download management.
 class YtDlpService {
   final BinaryManager _binaryManager = BinaryManager();
   final YoutubeExplode _yt = YoutubeExplode();
 
-  // Retrieves metadata for a video URL using youtube_explode (fast for YouTube) or yt-dlp (for other sites).
+  // Retrieves metadata using youtube_explode (fast, YouTube only) with yt-dlp fallback.
   Future<Map<String, dynamic>> getMetadata(String url) async {
-    // youtube_explode only supports YouTube, use yt-dlp for all other sites
     if (_isYouTubeUrl(url)) {
       try {
         return await _getMetadataWithYoutubeExplode(url);
@@ -22,85 +20,75 @@ class YtDlpService {
         debugPrint('youtube_explode failed, falling back to yt-dlp: $e');
         return await _getMetadataWithYtDlp(url);
       }
-    } else {
-      // For non-YouTube URLs, use yt-dlp directly
-      return await _getMetadataWithYtDlp(url);
     }
+    return await _getMetadataWithYtDlp(url);
   }
 
-  // Checks if the URL is a YouTube URL.
   bool _isYouTubeUrl(String url) {
     try {
-      final uri = Uri.parse(url);
-      final host = uri.host.toLowerCase();
+      final host = Uri.parse(url).host.toLowerCase();
       return host.contains('youtube.com') ||
           host.contains('youtu.be') ||
           host.contains('youtube-nocookie.com');
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
 
-  // Fast metadata extraction using youtube_explode_dart (native Dart, no external process).
+  // Fast native metadata extraction via youtube_explode_dart.
   Future<Map<String, dynamic>> _getMetadataWithYoutubeExplode(
       String url) async {
     final video = await _yt.videos.get(url).timeout(
-      const Duration(seconds: 15),
-      onTimeout: () {
-        throw TimeoutException(
-            'youtube_explode did not respond within 15 seconds.');
-      },
-    );
+          const Duration(seconds: 10),
+          onTimeout: () => throw TimeoutException(
+              'youtube_explode did not respond within 10 seconds.'),
+        );
 
-    final streamManifest =
+    final manifest =
         await _yt.videos.streamsClient.getManifest(video.id.value);
 
-    // Build formats list similar to yt-dlp structure
     final formats = <Map<String, dynamic>>[];
 
-    // Video + Audio streams
-    for (var stream in streamManifest.muxed) {
+    for (var s in manifest.muxed) {
       formats.add({
-        'format_id': stream.tag.toString(),
-        'ext': stream.container.name,
-        'quality': '${stream.videoQuality.name}',
-        'filesize': stream.size.totalBytes,
-        'tbr': stream.bitrate.bitsPerSecond / 1000,
-        'vcodec': stream.videoCodec,
-        'acodec': stream.audioCodec,
-        'width': stream.videoResolution.width,
-        'height': stream.videoResolution.height,
-        'fps': stream.framerate.framesPerSecond,
+        'format_id': s.tag.toString(),
+        'ext': s.container.name,
+        'quality': s.videoQuality.name,
+        'filesize': s.size.totalBytes,
+        'tbr': s.bitrate.bitsPerSecond / 1000,
+        'vcodec': s.videoCodec,
+        'acodec': s.audioCodec,
+        'width': s.videoResolution.width,
+        'height': s.videoResolution.height,
+        'fps': s.framerate.framesPerSecond,
       });
     }
 
-    // Video-only streams
-    for (var stream in streamManifest.video) {
+    for (var s in manifest.video) {
       formats.add({
-        'format_id': stream.tag.toString(),
-        'ext': stream.container.name,
-        'quality': '${stream.videoQuality.name}',
-        'filesize': stream.size.totalBytes,
-        'tbr': stream.bitrate.bitsPerSecond / 1000,
-        'vcodec': stream.videoCodec,
+        'format_id': s.tag.toString(),
+        'ext': s.container.name,
+        'quality': s.videoQuality.name,
+        'filesize': s.size.totalBytes,
+        'tbr': s.bitrate.bitsPerSecond / 1000,
+        'vcodec': s.videoCodec,
         'acodec': 'none',
-        'width': stream.videoResolution.width,
-        'height': stream.videoResolution.height,
-        'fps': stream.framerate.framesPerSecond,
+        'width': s.videoResolution.width,
+        'height': s.videoResolution.height,
+        'fps': s.framerate.framesPerSecond,
       });
     }
 
-    // Audio-only streams
-    for (var stream in streamManifest.audio) {
+    for (var s in manifest.audio) {
       formats.add({
-        'format_id': stream.tag.toString(),
-        'ext': stream.container.name,
+        'format_id': s.tag.toString(),
+        'ext': s.container.name,
         'quality': 'audio only',
-        'filesize': stream.size.totalBytes,
-        'tbr': stream.bitrate.bitsPerSecond / 1000,
+        'filesize': s.size.totalBytes,
+        'tbr': s.bitrate.bitsPerSecond / 1000,
         'vcodec': 'none',
-        'acodec': stream.audioCodec,
-        'abr': stream.bitrate.bitsPerSecond / 1000,
+        'acodec': s.audioCodec,
+        'abr': s.bitrate.bitsPerSecond / 1000,
       });
     }
 
@@ -111,22 +99,10 @@ class YtDlpService {
       'duration': video.duration?.inSeconds ?? 0,
       'thumbnail': video.thumbnails.highResUrl,
       'thumbnails': [
-        {
-          'url': video.thumbnails.lowResUrl,
-          'id': 'low',
-        },
-        {
-          'url': video.thumbnails.mediumResUrl,
-          'id': 'medium',
-        },
-        {
-          'url': video.thumbnails.highResUrl,
-          'id': 'high',
-        },
-        {
-          'url': video.thumbnails.maxResUrl,
-          'id': 'maxres',
-        },
+        {'url': video.thumbnails.lowResUrl, 'id': 'low'},
+        {'url': video.thumbnails.mediumResUrl, 'id': 'medium'},
+        {'url': video.thumbnails.highResUrl, 'id': 'high'},
+        {'url': video.thumbnails.maxResUrl, 'id': 'maxres'},
       ],
       'uploader': video.author,
       'uploader_id': video.channelId.value,
@@ -137,19 +113,18 @@ class YtDlpService {
           : null,
       'view_count': video.engagement.viewCount,
       'like_count': video.engagement.likeCount,
-      'upload_date': video.uploadDate != null
-          ? video.uploadDate.toString().replaceAll('-', '').substring(0, 8)
-          : null,
+      'upload_date':
+          video.uploadDate?.toString().replaceAll('-', '').substring(0, 8),
       'webpage_url': video.url,
       'formats': formats,
-      'ext': streamManifest.muxed.isNotEmpty
-          ? streamManifest.muxed.bestQuality.container.name
+      'ext': manifest.muxed.isNotEmpty
+          ? manifest.muxed.bestQuality.container.name
           : 'mp4',
       '_fetched_with': 'youtube_explode_dart',
     };
   }
 
-  // Fallback: Retrieves metadata using yt-dlp (slower, external process).
+  // Fallback metadata retrieval using the yt-dlp binary.
   Future<Map<String, dynamic>> _getMetadataWithYtDlp(String url) async {
     final execPath = await _binaryManager.getYtDlpPath();
 
@@ -170,9 +145,8 @@ class YtDlpService {
     try {
       final result = await Process.run(execPath, args).timeout(
         const Duration(seconds: 30),
-        onTimeout: () {
-          throw TimeoutException('yt-dlp did not respond within 30 seconds.');
-        },
+        onTimeout: () =>
+            throw TimeoutException('yt-dlp did not respond within 30 seconds.'),
       );
 
       if (result.exitCode != 0) {
@@ -184,17 +158,14 @@ class YtDlpService {
       }
 
       final output = result.stdout.toString().trim();
-      if (output.isEmpty) {
-        throw Exception('yt-dlp returned empty output.');
-      }
+      if (output.isEmpty) throw Exception('yt-dlp returned empty output.');
 
       try {
         final metadata = jsonDecode(output);
         metadata['_fetched_with'] = 'yt-dlp';
         return metadata;
-      } catch (e) {
-        final lines = const LineSplitter().convert(output);
-        for (var line in lines) {
+      } catch (_) {
+        for (var line in const LineSplitter().convert(output)) {
           try {
             if (line.trim().startsWith('{')) {
               final metadata = jsonDecode(line);
@@ -210,12 +181,11 @@ class YtDlpService {
     }
   }
 
-  // Cleanup method for YoutubeExplode client
   void dispose() {
     _yt.close();
   }
 
-  // Starts the download process using yt-dlp binary.
+  // Starts a yt-dlp download process.
   Future<Process> startDownload(
     String url,
     String downloadPath, {
@@ -229,8 +199,8 @@ class YtDlpService {
     final binDir = await _binaryManager.getBinariesPath();
 
     final env = Map<String, String>.from(Platform.environment);
-    final separator = Platform.isWindows ? ';' : ':';
-    env['PATH'] = '$binDir$separator${env['PATH'] ?? ""}';
+    final sep = Platform.isWindows ? ';' : ':';
+    env['PATH'] = '$binDir$sep${env['PATH'] ?? ""}';
 
     final args = [
       '--newline',
@@ -245,110 +215,86 @@ class YtDlpService {
         : '%(title)s.%(ext)s';
 
     if (tempPath != null) {
-      args.addAll([
-        '-P',
-        'temp:$tempPath',
-        '-P',
-        downloadPath,
-        '-o',
-        outputTemplate,
-      ]);
+      args.addAll(['-P', 'temp:$tempPath', '-P', downloadPath, '-o', outputTemplate]);
     } else {
       args.addAll(['-o', '$downloadPath/$outputTemplate']);
     }
 
     _addFormatArgs(args, format, quality);
     args.add(url);
-
     return Process.start(ytDlpPath, args, environment: env);
   }
 
-  // Adds format-specific arguments to the download command.
   void _addFormatArgs(
       List<String> args, DownloadFormat format, DownloadQuality quality) {
     if (format == DownloadFormat.mp3) {
       args.addAll(['-x', '--audio-format', 'mp3']);
     } else if (format == DownloadFormat.m4a) {
       args.addAll(['-x', '--audio-format', 'm4a']);
+    } else if (format == DownloadFormat.ogg) {
+      args.addAll(['-x', '--audio-format', 'vorbis']);
     } else {
-      final heightConstraint = _getHeightConstraint(quality);
-
+      final hc = _heightConstraint(quality);
       if (format == DownloadFormat.mp4) {
-        if (heightConstraint.isNotEmpty) {
-          args.addAll([
-            '-f',
-            'bv*$heightConstraint[ext=mp4]+ba[ext=m4a]/b$heightConstraint[ext=mp4] / bv*$heightConstraint+ba/b$heightConstraint',
-          ]);
-        } else {
-          args.addAll(['-f', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b']);
-        }
-        args.addAll(['--merge-output-format', 'mp4']);
+        args.addAll([
+          '-f',
+          hc.isNotEmpty
+              ? 'bv*$hc[ext=mp4]+ba[ext=m4a]/b$hc[ext=mp4] / bv*$hc+ba/b$hc'
+              : 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b',
+          '--merge-output-format',
+          'mp4',
+        ]);
       } else if (format == DownloadFormat.mkv) {
-        if (heightConstraint.isNotEmpty) {
-          args.addAll(['-f', 'bv*$heightConstraint+ba/b$heightConstraint']);
-        }
+        if (hc.isNotEmpty) args.addAll(['-f', 'bv*$hc+ba/b$hc']);
         args.addAll(['--merge-output-format', 'mkv']);
       }
     }
   }
 
-  // Returns height constraint string based on quality.
-  String _getHeightConstraint(DownloadQuality quality) {
+  String _heightConstraint(DownloadQuality quality) {
     switch (quality) {
       case DownloadQuality.best:
         return '';
-      case DownloadQuality.medium:
-        return '[height<=720]';
-      case DownloadQuality.low:
-        return '[height<=480]';
+      case DownloadQuality.high:
       case DownloadQuality.p1080:
         return '[height<=1080]';
+      case DownloadQuality.medium:
       case DownloadQuality.p720:
         return '[height<=720]';
+      case DownloadQuality.low:
       case DownloadQuality.p480:
         return '[height<=480]';
+      case DownloadQuality.p1440:
+        return '[height<=1440]';
+      case DownloadQuality.p2160:
+        return '[height<=2160]';
     }
   }
 
-  // Fetches subtitles for a video, falling back to description if needed.
+  // Fetches subtitles for a video, falling back to English if the requested language fails.
   Future<String?> fetchVideoSubtitles(String url,
       {String langCode = 'en'}) async {
-    final ytDlpTranscript = await _fetchSubtitlesWithYtDlp(url, langCode);
-    if (ytDlpTranscript != null) {
-      return ytDlpTranscript;
-    }
-
     try {
-      final helper = YouTubeTranscriptFetcher();
-      final xml = await helper.fetchCaptions(url, languageCode: langCode);
-      final captions = CaptionParser.parseXml(xml);
-      final fullTranscript = captions.map((c) => c.text).join(' ');
-
-      if (fullTranscript.trim().isEmpty) {
-        throw Exception("Empty subtitles");
-      }
-      return fullTranscript;
-    } catch (e) {
-      debugPrint("Fallback subtitles fetch failed: $e");
-      return null;
+      return await _fetchSubtitlesWithYtDlp(url, langCode);
+    } catch (_) {
+      return await _fetchSubtitlesWithYtDlp(url, 'en');
     }
   }
 
-  // Fetches subtitles using yt-dlp.
   Future<String?> _fetchSubtitlesWithYtDlp(String url, String langCode) async {
     Directory? tempDir;
     try {
       final ytDlpPath = await _binaryManager.getYtDlpPath();
       tempDir = Directory.systemTemp.createTempSync('yt_subs_');
-      final fileName = 'subs_${DateTime.now().millisecondsSinceEpoch}';
-      final filePath = '${tempDir.path}/$fileName';
+      final filePath =
+          '${tempDir.path}/subs_${DateTime.now().millisecondsSinceEpoch}';
 
-      final args = [
+      final result = await Process.run(ytDlpPath, [
         '--skip-download',
         '--write-sub',
         '--write-auto-sub',
         '--sub-lang',
-        '$langCode,$langCode-orig,en,en-orig',
+        '$langCode,$langCode-orig',
         '--convert-subs',
         'vtt',
         '--force-ipv4',
@@ -358,10 +304,9 @@ class YtDlpService {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '-o',
         filePath,
-        url
-      ];
+        url,
+      ]);
 
-      final result = await Process.run(ytDlpPath, args);
       final dirFiles = tempDir.listSync();
       File? subFile;
 
@@ -378,39 +323,30 @@ class YtDlpService {
         }
       }
 
-      if (subFile != null) {
-        final content = await subFile.readAsString();
-        return _cleanVttAttributes(content);
-      }
-
+      if (subFile != null) return _cleanVtt(await subFile.readAsString());
       if (result.exitCode != 0) {
-        debugPrint("yt-dlp subs failed: ${result.stderr}");
+        debugPrint("Subtitle extraction failed for lang=$langCode");
+        throw Exception(result.stderr); 
       }
-
       return null;
     } catch (e) {
-      debugPrint("yt-dlp fallback error: $e");
-      return null;
+      debugPrint("Subtitle extraction failed for lang=$langCode");
+      throw Exception(e);
     } finally {
-      if (tempDir != null && tempDir.existsSync()) {
-        try {
-          tempDir.deleteSync(recursive: true);
-        } catch (_) {}
-      }
+      try {
+        tempDir?.deleteSync(recursive: true);
+      } catch (_) {}
     }
   }
 
-  // Pre-compiled regexes for VTT cleaning (avoids recompilation per call).
-  static final _vttTimestampRegex =
-      RegExp(r'(\d{2}:)?\d{2}:\d{2}\.\d{3}\s-->\s(\d{2}:)?\d{2}:\d{2}\.\d{3}');
+  static final _vttTimestampRegex = RegExp(
+      r'(\d{2}:)?\d{2}:\d{2}\.\d{3}\s-->\s(\d{2}:)?\d{2}:\d{2}\.\d{3}');
   static final _htmlTagRegex = RegExp(r'<[^>]*>');
 
-  // Cleans VTT subtitle format, removing metadata and tags.
-  String _cleanVttAttributes(String vttContent) {
-    final lines = vttContent.split('\n');
+  // Strips VTT metadata, timestamps, and HTML tags to produce plain transcript text.
+  String _cleanVtt(String vttContent) {
     final buffer = StringBuffer();
-
-    for (var line in lines) {
+    for (var line in vttContent.split('\n')) {
       line = line.trim();
       if (line.isEmpty ||
           line.startsWith('WEBVTT') ||
@@ -420,23 +356,19 @@ class YtDlpService {
           int.tryParse(line) != null) {
         continue;
       }
-
-      var text = line
+      final text = line
           .replaceAll(_htmlTagRegex, '')
           .replaceAll('&nbsp;', ' ')
           .replaceAll('&amp;', '&')
           .replaceAll('&lt;', '<')
           .replaceAll('&gt;', '>')
           .replaceAll('&quot;', '"');
-
-      if (text.isNotEmpty) {
-        buffer.write("$text ");
-      }
+      if (text.isNotEmpty) buffer.write("$text ");
     }
     return buffer.toString().trim();
   }
 
-  // Retrieves metadata for a YouTube playlist.
+  // Retrieves playlist metadata via yt-dlp.
   Future<Map<String, dynamic>> getPlaylistMetadata(String url) async {
     final execPath = await _binaryManager.getYtDlpPath();
 
@@ -460,40 +392,51 @@ class YtDlpService {
         throw Exception('yt-dlp error: ${result.stderr}');
       }
 
-      final output = result.stdout.toString().trim();
-      final lines = const LineSplitter().convert(output);
+      final lines = const LineSplitter().convert(result.stdout.toString().trim());
+      if (lines.isEmpty) throw Exception('Empty output from yt-dlp');
 
-      if (lines.isEmpty) {
-        throw Exception('Empty output from yt-dlp');
-      }
-
-      final playlistInfo = jsonDecode(lines.first);
+      Map<String, dynamic>? playlistInfo;
       final videos = <Map<String, dynamic>>[];
 
       for (int i = 0; i < lines.length; i++) {
         try {
           final item = jsonDecode(lines[i]);
-          if (item['_type'] == 'url' || item['_type'] == 'url_transparent') {
+          if (item['_type'] == 'playlist') {
+            playlistInfo = item;
+          } else if (item['_type'] == 'url' ||
+              item['_type'] == 'url_transparent') {
             videos.add(item);
           }
         } catch (e) {
-          debugPrint('Error parsing video $i: $e');
+          debugPrint('Error parsing playlist item $i: $e');
         }
       }
 
+      playlistInfo ??= jsonDecode(lines.first);
+
+      String? thumbnail = playlistInfo?['thumbnail'] as String?;
+      if (thumbnail == null && playlistInfo?['thumbnails'] is List) {
+        final thumbs = playlistInfo?['thumbnails'] as List;
+        if (thumbs.isNotEmpty && thumbs.last is Map) {
+          thumbnail = thumbs.last['url'] as String?;
+        }
+      }
+      thumbnail ??=
+          videos.isNotEmpty ? videos.first['thumbnail'] as String? : null;
+
       return {
-        'title': playlistInfo['title'] ??
-            playlistInfo['playlist_title'] ??
+        'title': playlistInfo?['playlist_title'] ??
+            playlistInfo?['title'] ??
             'Playlist',
-        'uploader': playlistInfo['uploader'] ??
-            playlistInfo['channel'] ??
-            playlistInfo['uploader_id'] ??
+        'uploader': playlistInfo?['playlist_uploader'] ??
+            playlistInfo?['uploader'] ??
+            playlistInfo?['channel'] ??
+            playlistInfo?['uploader_id'] ??
             'Unknown',
-        'thumbnail': playlistInfo['thumbnail'] ??
-            (videos.isNotEmpty ? videos.first['thumbnail'] : null),
+        'thumbnail': thumbnail,
         'videoCount': videos.length,
         'videos': videos,
-        'playlistId': playlistInfo['id'] ?? playlistInfo['playlist_id'],
+        'playlistId': playlistInfo?['playlist_id'] ?? playlistInfo?['id'],
       };
     } catch (e) {
       debugPrint("Playlist metadata error: $e");
@@ -501,7 +444,7 @@ class YtDlpService {
     }
   }
 
-  // Downloads a YouTube playlist.
+  // Starts a playlist download via yt-dlp.
   Future<Process> startPlaylistDownload(
     String url,
     String downloadPath, {
@@ -514,8 +457,8 @@ class YtDlpService {
     final binDir = await _binaryManager.getBinariesPath();
 
     final env = Map<String, String>.from(Platform.environment);
-    final separator = Platform.isWindows ? ';' : ':';
-    env['PATH'] = '$binDir$separator${env['PATH'] ?? ""}';
+    final sep = Platform.isWindows ? ';' : ':';
+    env['PATH'] = '$binDir$sep${env['PATH'] ?? ""}';
 
     final args = [
       '--newline',
@@ -533,34 +476,24 @@ class YtDlpService {
     const outputTemplate = '%(playlist_index)s - %(title)s.%(ext)s';
 
     if (tempPath != null) {
-      args.addAll([
-        '-P',
-        'temp:$tempPath',
-        '-P',
-        downloadPath,
-        '-o',
-        outputTemplate,
-      ]);
+      args.addAll(['-P', 'temp:$tempPath', '-P', downloadPath, '-o', outputTemplate]);
     } else {
       args.addAll(['-o', '$downloadPath/$outputTemplate']);
     }
 
     _addFormatArgs(args, format, quality);
     args.add(url);
-
     return Process.start(ytDlpPath, args, environment: env);
   }
 
-  // Pre-compiled regex patterns for progress parsing (avoids recompilation per call).
   static final _progressRegex = RegExp(
     r'\[download\]\s+(\d+\.?\d*)%\s+of\s+([^\s]+)\s+at\s+([^\s]+)\s+ETA\s+([^\s]+)',
   );
   static final _simpleProgressRegex = RegExp(r'\[download\]\s+(\d+\.?\d*)%');
 
-  // Parses yt-dlp output line to extract progress information.
+  // Parses a yt-dlp output line to extract progress information.
   Map<String, dynamic>? parseProgress(String line) {
     final match = _progressRegex.firstMatch(line);
-
     if (match != null) {
       return {
         'progress': double.tryParse(match.group(1)!),
@@ -570,11 +503,10 @@ class YtDlpService {
       };
     }
 
-    final simpleMatch = _simpleProgressRegex.firstMatch(line);
-    if (simpleMatch != null) {
-      return {'progress': double.tryParse(simpleMatch.group(1)!)};
+    final simple = _simpleProgressRegex.firstMatch(line);
+    if (simple != null) {
+      return {'progress': double.tryParse(simple.group(1)!)};
     }
-
     return null;
   }
 }

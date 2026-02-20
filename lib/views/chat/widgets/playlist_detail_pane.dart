@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/models/download_task.dart';
@@ -39,7 +41,9 @@ class YouTubePlaylistDetailPane extends ConsumerWidget {
     // If a video is selected, show its MediaDetailPane
     if (selectedVideo != null) {
       return SizedBox(
-          width: MediaQuery.of(context).size.width * 0.35,
+          width: MediaQuery.of(context).size.width * 0.35 < 600
+              ? MediaQuery.of(context).size.width * 0.35
+              : 600,
           child: Column(
             children: [
               // Header with back button
@@ -65,7 +69,7 @@ class YouTubePlaylistDetailPane extends ConsumerWidget {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back),
+                      icon: const Icon(Icons.chevron_left),
                       onPressed: () {
                         ref
                             .read(selectedPlaylistVideoProvider.notifier)
@@ -112,6 +116,17 @@ class _PlaylistOverview extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
 
     final allTasksAsync = ref.watch(downloadListProvider);
+
+    // Recupera la playlist aggiornata dal provider invece di usare il parametro statico
+    final updatedPlaylist = allTasksAsync.when(
+      data: (tasks) => tasks.firstWhere(
+        (task) => task.id == playlist.id,
+        orElse: () => playlist,
+      ),
+      loading: () => playlist,
+      error: (_, __) => playlist,
+    );
+
     final childVideos = allTasksAsync.when(
       data: (tasks) =>
           tasks.where((task) => task.playlistParentId == playlist.id).toList()
@@ -121,230 +136,253 @@ class _PlaylistOverview extends ConsumerWidget {
     );
 
     return Container(
-      width: MediaQuery.of(context).size.width * 0.35,
+      width: MediaQuery.of(context).size.width * 0.35 < 600
+          ? MediaQuery.of(context).size.width * 0.35
+          : 600,
+      height: double.infinity,
       decoration: BoxDecoration(
         color: colorScheme.surface,
         border: Border(
           left: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
         ),
       ),
-      child: Column(
-        children: [
-          // Playlist info header
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: colorScheme.outlineVariant.withOpacity(0.5),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child:
+            // Playlist info header
+            Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Large thumbnail
+            if (updatedPlaylist.thumbnail != null)
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: Theme.brightnessOf(context) == Brightness.dark
+                        ? Colors.white.withOpacity(0.1)
+                        : Theme.of(context).colorScheme.surfaceContainerHighest,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CachedNetworkImage(
+                          imageUrl: updatedPlaylist.thumbnail!,
+                          fit: BoxFit.fitWidth,
+                          width: double.infinity,
+                          errorWidget: (context, url, error) => Container(
+                            color: colorScheme.surfaceContainerHighest,
+                            child: Center(
+                              child: FIcon(
+                                RI.RiPlayListLine,
+                                size: 64,
+                                color: colorScheme.onSurfaceVariant
+                                    .withOpacity(0.3),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withOpacity(0.3),
+                                Colors.black.withOpacity(0.6),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Center(
+                          child: FIcon(
+                            RI.RiPlayListFill,
+                            color: Colors.white,
+                            size: 48,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
+            const SizedBox(height: 16),
+
+            // Title
+            Text(
+              updatedPlaylist.title ?? l10n.playlist,
+              style: GoogleFonts.montserrat(
+                  fontSize: 20, fontWeight: FontWeight.w600, height: 1.2),
             ),
-            child: Column(
+            const SizedBox(height: 2),
+
+            // Channel
+            if (updatedPlaylist.channelName != null)
+              Text(
+                updatedPlaylist.channelName!,
+                style: GoogleFonts.montserrat(
+                    fontSize: 15,
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w500),
+              ),
+            const SizedBox(height: 16),
+
+            // Progress
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Large thumbnail
-                if (playlist.thumbnail != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Stack(
-                        fit: StackFit.expand,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FIcon(
+                          RI.RiCalendarLine,
+                          size: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          DateFormat('dd MMM yyyy',
+                                  Localizations.localeOf(context).toString())
+                              .format(playlist.createdAt),
+                          style: GoogleFonts.montserrat(
+                            fontSize: 12,
+                            color: Theme.of(context).hintColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 12),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FIcon(
+                          RI.RiVideoLine,
+                          size: 14,
+                          color: Theme.of(context).hintColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${updatedPlaylist.playlistCompletedVideos ?? 0}/${updatedPlaylist.playlistTotalVideos ?? 0}',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 12,
+                            color: Theme.of(context).hintColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 12),
+                    if (playlist.playlistCompletedVideos ==
+                        playlist.playlistTotalVideos)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Image.network(
-                            playlist.thumbnail!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                              color: colorScheme.surfaceContainerHighest,
-                              child: Center(
-                                child: FIcon(
-                                  RI.RiPlayListLine,
-                                  size: 64,
-                                  color: colorScheme.onSurfaceVariant
-                                      .withOpacity(0.3),
-                                ),
-                              ),
+                          FIcon(
+                            RI.RiDownloadLine,
+                            size: 14,
+                            color: Theme.of(context).hintColor,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.downloaded,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 12,
+                              color: Theme.of(context).hintColor,
                             ),
                           ),
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.black.withOpacity(0.3),
-                                  Colors.black.withOpacity(0.6),
-                                ],
-                              ),
-                            ),
+                        ],
+                      ),
+                  ],
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Open folder button
+            if (updatedPlaylist.dirPath != null)
+              OutlinedButton.icon(
+                onPressed: () => OpenFile.open(updatedPlaylist.dirPath),
+                icon: const FIcon(RI.RiFolderOpenLine),
+                label: Text(l10n.openFolder),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  backgroundColor: colorScheme.tertiary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  side:
+                      BorderSide(color: colorScheme.primary.withOpacity(0.15)),
+                ),
+              ),
+            Divider(
+              color: colorScheme.outlineVariant.withOpacity(0.5),
+            ),
+
+            // Video list
+            childVideos.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 64),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          FIcon(
+                            RI.RiPlayListLine,
+                            size: 64,
+                            color:
+                                colorScheme.onSurfaceVariant.withOpacity(0.3),
                           ),
-                          const Center(
-                            child: FIcon(
-                              RI.RiPlayListFill,
-                              color: Colors.white,
-                              size: 48,
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.noVideosFound,
+                            style: GoogleFonts.notoSans(
+                              color: colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                const SizedBox(height: 16),
-
-                // Title
-                Text(
-                  playlist.title ?? l10n.playlist,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Channel
-                if (playlist.channelName != null)
-                  Row(
-                    children: [
-                      FIcon(
-                        RI.RiUserLine,
-                        size: 14,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        playlist.channelName!,
-                        style: GoogleFonts.notoSans(
-                          fontSize: 13,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 16),
-
-                // Progress
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              FIcon(
-                                RI.RiVideoLine,
-                                size: 14,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${playlist.playlistCompletedVideos ?? 0}/${playlist.playlistTotalVideos ?? 0}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 400),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: playlist.progress,
-                          backgroundColor: colorScheme.surfaceContainerHighest,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            playlist.status == 'completed'
-                                ? Colors.green
-                                : colorScheme.primary,
-                          ),
-                          minHeight: 8,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Open folder button
-                if (playlist.dirPath != null)
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => OpenFile.open(playlist.dirPath),
-                      icon: const FIcon(RI.RiFolderOpenLine, size: 18),
-                      label: Text(l10n.openFolder),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // Video list
-          Expanded(
-            child: childVideos.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FIcon(
-                          RI.RiPlayListLine,
-                          size: 64,
-                          color: colorScheme.onSurfaceVariant.withOpacity(0.3),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          l10n.noVideosFound,
-                          style: GoogleFonts.notoSans(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: childVideos.length,
-                    itemBuilder: (context, index) {
-                      final video = childVideos[index];
-                      return _PlaylistVideoItem(
-                        video: video,
-                        index: index + 1,
-                        onTap: () {
-                          ref
-                              .read(selectedPlaylistVideoProvider.notifier)
-                              .select(video);
-                        },
-                      );
-                    },
+                : Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Column(
+                      children: [
+                        for (var video in childVideos) ...[
+                          _PlaylistVideoItem(
+                            video: video,
+                            index: childVideos.indexOf(video) + 1,
+                            onTap: () {
+                              ref
+                                  .read(selectedPlaylistVideoProvider.notifier)
+                                  .select(video);
+                            },
+                          ),
+                        ]
+                      ],
+                    ),
                   ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 // Item widget for a video within the playlist.
-class _PlaylistVideoItem extends StatefulWidget {
+class _PlaylistVideoItem extends ConsumerStatefulWidget {
   final DownloadTask video;
   final int index;
   final VoidCallback onTap;
@@ -356,133 +394,145 @@ class _PlaylistVideoItem extends StatefulWidget {
   });
 
   @override
-  State<_PlaylistVideoItem> createState() => _PlaylistVideoItemState();
+  ConsumerState<_PlaylistVideoItem> createState() => _PlaylistVideoItemState();
 }
 
-class _PlaylistVideoItemState extends State<_PlaylistVideoItem> {
-  bool _isHovered = false;
-
+class _PlaylistVideoItemState extends ConsumerState<_PlaylistVideoItem> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: _isHovered
-              ? colorScheme.surfaceContainerHighest
-              : colorScheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: colorScheme.outlineVariant.withOpacity(0.5),
-          ),
+    // Watch live progress for immediate UI updates
+    final liveProgressMap = ref.watch(activeDownloadProgressProvider);
+    final live = liveProgressMap[widget.video.id];
+    
+    // Consider downloading active if status is 'downloading' OR if there's live progress data
+    final isDownloading = widget.video.downloadStatus == WorkStatus.running || live != null;
+    final effectiveProgress = (live?['progress'] as double?) ?? widget.video.progress;
+    final effectiveSpeed = (live?['downloadSpeed'] as String?) ?? widget.video.downloadSpeed;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.tertiary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.primary.withOpacity(0.15),
         ),
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Index number
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${widget.index}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primary,
-                      ),
+      ),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Index number
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '${widget.index}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+              ),
+              const SizedBox(width: 12),
 
-                // Thumbnail
-                if (widget.video.thumbnail != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.network(
-                      widget.video.thumbnail!,
+              // Thumbnail
+              if (widget.video.thumbnail != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: CachedNetworkImage(
+                    imageUrl: widget.video.thumbnail!,
+                    width: 80,
+                    height: 45,
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.medium,
+                    errorWidget: (context, url, error) => Container(
                       width: 80,
                       height: 45,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 80,
-                        height: 45,
-                        color: colorScheme.surfaceContainerHighest,
-                        child: Icon(
-                          Icons.image_not_supported,
-                          color: colorScheme.onSurfaceVariant.withOpacity(0.3),
-                          size: 20,
-                        ),
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white.withOpacity(0.1)
+                          : colorScheme.surfaceContainerHighest,
+                      child: Icon(
+                        Icons.image_not_supported,
+                        color: colorScheme.onSurfaceVariant.withOpacity(0.3),
+                        size: 20,
                       ),
                     ),
                   ),
-                const SizedBox(width: 12),
+                ),
+              const SizedBox(width: 12),
 
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              // Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.video.title ??
+                          AppLocalizations.of(context)!.unknownTrack,
+                      style: GoogleFonts.notoSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (widget.video.channelName != null)
                       Text(
-                        widget.video.title ?? 'Video ${widget.index}',
+                        widget.video.channelName!,
                         style: GoogleFonts.notoSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
                         ),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (widget.video.status == 'downloading')
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(2),
-                                child: LinearProgressIndicator(
-                                  value: widget.video.progress / 100,
-                                  backgroundColor:
-                                      colorScheme.surfaceContainerHighest,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    colorScheme.primary,
-                                  ),
-                                  minHeight: 4,
-                                ),
+                    if (isDownloading)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(2),
+                              child: LinearProgressIndicator(
+                                value: effectiveProgress,
+                                backgroundColor:
+                                    colorScheme.primary.withOpacity(0.2),
+                                minHeight: 3,
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${widget.video.progress.toStringAsFixed(0)}% • ${widget.video.downloadSpeed ?? "..."}',
-                                style: GoogleFonts.notoSans(
-                                  fontSize: 10,
-                                  color: colorScheme.primary,
-                                ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${(effectiveProgress * 100).toStringAsFixed(0)}% • ${effectiveSpeed ?? "..."}',
+                              style: GoogleFonts.notoSans(
+                                fontSize: 12,
+                                color: colorScheme.primary,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 12),
+              ),
+              const SizedBox(width: 12),
 
-                // Status icon
-                _buildStatusIcon(colorScheme),
-              ],
-            ),
+              // Status icon
+              _buildStatusIcon(colorScheme),
+            ],
           ),
         ),
       ),
@@ -493,12 +543,12 @@ class _PlaylistVideoItemState extends State<_PlaylistVideoItem> {
     IconData icon;
     Color color;
 
-    switch (widget.video.status) {
-      case 'completed':
+    switch (widget.video.downloadStatus) {
+      case WorkStatus.completed:
         icon = Icons.check_circle_rounded;
         color = Colors.green;
         break;
-      case 'downloading':
+      case WorkStatus.running:
         return SizedBox(
           width: 24,
           height: 24,
@@ -507,7 +557,7 @@ class _PlaylistVideoItemState extends State<_PlaylistVideoItem> {
             valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
           ),
         );
-      case 'error':
+      case WorkStatus.failed:
         icon = Icons.error_rounded;
         color = Theme.of(context).colorScheme.error;
         break;

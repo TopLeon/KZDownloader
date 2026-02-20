@@ -48,7 +48,7 @@ final class DbServiceProvider
   }
 }
 
-String _$dbServiceHash() => r'b10e9d8f6323903849fea133e43623a75ce7def9';
+String _$dbServiceHash() => r'13e7dd57c66ffa9a1d062494249d131bb91673dc';
 
 @ProviderFor(dbInit)
 const dbInitProvider = DbInitProvider._();
@@ -81,7 +81,7 @@ final class DbInitProvider
   }
 }
 
-String _$dbInitHash() => r'8d5c33cf0131a3a976d28a56712cb07f915a83c7';
+String _$dbInitHash() => r'21b7be03fdbb027acd600e8d631880962ee316ed';
 
 @ProviderFor(SelectedCategory)
 const selectedCategoryProvider = SelectedCategoryProvider._();
@@ -115,7 +115,7 @@ final class SelectedCategoryProvider
   }
 }
 
-String _$selectedCategoryHash() => r'75b0f0c64348cf4b1f39f5e97ce235f1ce6f8596';
+String _$selectedCategoryHash() => r'fecd06fd5d1cc05d8993ea5c66bcc26db258d503';
 
 abstract class _$SelectedCategory extends $Notifier<TaskCategory?> {
   TaskCategory? build();
@@ -165,7 +165,7 @@ final class LastAddedTaskIdProvider
   }
 }
 
-String _$lastAddedTaskIdHash() => r'cb0ea7f6bd16b47a32c613bf4f26cafe6156c379';
+String _$lastAddedTaskIdHash() => r'e62009b547ffb2a43375effd0446d9a4d053b52a';
 
 abstract class _$LastAddedTaskId extends $Notifier<int?> {
   int? build();
@@ -212,7 +212,7 @@ final class ExpandedTaskIdProvider
   }
 }
 
-String _$expandedTaskIdHash() => r'3d50955c0536b3ec784c760a1c1e809b1b6d854c';
+String _$expandedTaskIdHash() => r'ab037992611baa400ea2e135c6aefb87bb2db9e2';
 
 abstract class _$ExpandedTaskId extends $Notifier<int?> {
   int? build();
@@ -223,6 +223,61 @@ abstract class _$ExpandedTaskId extends $Notifier<int?> {
     final ref = this.ref as $Ref<int?, int?>;
     final element = ref.element as $ClassProviderElement<
         AnyNotifier<int?, int?>, int?, Object?, Object?>;
+    element.handleValue(ref, created);
+  }
+}
+
+@ProviderFor(ActiveDownloadProgress)
+const activeDownloadProgressProvider = ActiveDownloadProgressProvider._();
+
+final class ActiveDownloadProgressProvider extends $NotifierProvider<
+    ActiveDownloadProgress, Map<int, Map<String, dynamic>>> {
+  const ActiveDownloadProgressProvider._()
+      : super(
+          from: null,
+          argument: null,
+          retry: null,
+          name: r'activeDownloadProgressProvider',
+          isAutoDispose: false,
+          dependencies: null,
+          $allTransitiveDependencies: null,
+        );
+
+  @override
+  String debugGetCreateSourceHash() => _$activeDownloadProgressHash();
+
+  @$internal
+  @override
+  ActiveDownloadProgress create() => ActiveDownloadProgress();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(Map<int, Map<String, dynamic>> value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride:
+          $SyncValueProvider<Map<int, Map<String, dynamic>>>(value),
+    );
+  }
+}
+
+String _$activeDownloadProgressHash() =>
+    r'feb60b4f4c02803f80f8bb17fa3c4bd481a898c4';
+
+abstract class _$ActiveDownloadProgress
+    extends $Notifier<Map<int, Map<String, dynamic>>> {
+  Map<int, Map<String, dynamic>> build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final created = build();
+    final ref = this.ref
+        as $Ref<Map<int, Map<String, dynamic>>, Map<int, Map<String, dynamic>>>;
+    final element = ref.element as $ClassProviderElement<
+        AnyNotifier<Map<int, Map<String, dynamic>>,
+            Map<int, Map<String, dynamic>>>,
+        Map<int, Map<String, dynamic>>,
+        Object?,
+        Object?>;
     element.handleValue(ref, created);
   }
 }
@@ -251,7 +306,7 @@ final class DownloadListProvider
   DownloadList create() => DownloadList();
 }
 
-String _$downloadListHash() => r'3b6692f604e06444335872cc8ec1627116d283e4';
+String _$downloadListHash() => r'9efeb7283a9585ad87d1abab284dfcb03ff906a3';
 
 abstract class _$DownloadList extends $StreamNotifier<List<DownloadTask>> {
   Stream<List<DownloadTask>> build();

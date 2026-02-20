@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kzdownloader/core/download/providers/download_provider.dart';
 import 'package:kzdownloader/models/download_task.dart';
@@ -83,7 +84,7 @@ class _AddMusicToPlaylistDialogState
                         leading: task.thumbnail != null
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
-                                child: Image.network(task.thumbnail!,
+                                child: CachedNetworkImage(imageUrl: task.thumbnail!,
                                     width: 40, height: 40, fit: BoxFit.cover),
                               )
                             : const Icon(Icons.music_note),
