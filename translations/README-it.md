@@ -59,7 +59,7 @@ L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **F
 - **Gestione playlist**: crea playlist con nome personalizzato e aggiungi le tracce.
 
 ### 🔒 Sicurezza e Integrità
-- **Verifica checksum** (MD5, SHA-1, SHA-256, SHA-512) prima di avviare il download, per garantire l'integrità del file.
+- **Verifica checksum** (MD5, SHA-256) prima di avviare il download, per garantire l'integrità del file.
 - Le chiavi API sono memorizzate nel **secure storage** del sistema operativo (keychain / credential manager).
 
 ### ⚙️ Impostazioni e Personalizzazione
@@ -76,6 +76,13 @@ L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **F
 - **Bordi neon animati** (`RainbowAnimatedBorder`) attorno alle card di download e agli elementi interattivi, renderizzati tramite un `CustomPainter` dedicato.
 - Effetti glow glassmorphism sulla schermata iniziale e transizioni fluide nell'intera UI.
 - Layout responsive con adattamenti separati per Windows/Linux e macOS.
+
+&nbsp;
+<p align="center">
+  <img src="./img/1.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./img/2.png" width="45%">
+</p>
+&nbsp;
 
 ## 🏗️ Architettura e Stack Tecnologico
 

@@ -64,7 +64,7 @@ The interface is organized into dedicated sections — **Videos**, **Music**, an
 - **Playlist management**: create named playlists and add tracks to them.
 
 ### 🔒 Security & Integrity
-- **Checksum verification** (MD5, SHA-1, SHA-256, SHA-512) before triggering a download, ensuring file integrity.
+- **Checksum verification** (MD5, SHA-256) before triggering a download, ensuring file integrity.
 - API keys stored in **secure storage** (OS keychain / credential manager).
 
 ### ⚙️ Settings & Customisation
