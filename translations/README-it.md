@@ -83,6 +83,11 @@ L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **F
   <img src="./img/2.png" width="45%">
 </p>
 &nbsp;
+<p align="center">
+  <img src="./img/3.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./img/4.png" width="45%">
+</p>
+&nbsp;
 
 ## 🏗️ Architettura e Stack Tecnologico
 

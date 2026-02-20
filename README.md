@@ -27,10 +27,6 @@ KZDownloader is a cross-platform desktop application built with Flutter that let
 
 The interface is organized into dedicated sections — **Videos**, **Music**, and **Generic files** — each with its own tailored view and controls. The design is modern, minimal, and fully reactive, featuring animated neon/rainbow gradient borders on download cards and interactive elements, smooth transitions, and real-time progress feedback.
 
-## 🕹️ Demo
-
-<img src="./img/demo.gif" width="100%">
-
 ## ✨ Features
 
 ### 🎬 Video & Audio Downloads
@@ -85,6 +81,11 @@ The interface is organized into dedicated sections — **Videos**, **Music**, an
 <p align="center">
   <img src="./img/1.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="./img/2.png" width="45%">
+</p>
+&nbsp;
+<p align="center">
+  <img src="./img/3.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./img/4.png" width="45%">
 </p>
 &nbsp;
 
