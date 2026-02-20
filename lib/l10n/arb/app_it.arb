@@ -522,5 +522,6 @@
     "cancelDownloadTooltip": "Annulla Download",
     "queued": "In coda",
     "diskSpace": "Spazio su disco",
-    "insufficientDiskSpace": "Spazio su disco insufficiente"
+    "insufficientDiskSpace": "Spazio su disco insufficiente",
+    "folderNotSelected": "Nessuna cartella selezionata"
 }

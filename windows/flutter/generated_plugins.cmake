@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   isar_community_flutter_libs
   media_kit_libs_windows_audio
   screen_retriever_windows
+  url_launcher_windows
   window_manager
 )
 

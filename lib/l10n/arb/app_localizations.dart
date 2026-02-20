@@ -2671,6 +2671,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Disk Space'**
   String get diskSpace;
+
+  /// No description provided for @folderNotSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No folder selected'**
+  String get folderNotSelected;
 }
 
 class _AppLocalizationsDelegate

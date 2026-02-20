@@ -526,5 +526,6 @@
     "cancelDownloadTooltip": "Cancel Download",
     "queued": "Queued",
     "diskSpace": "Disk Space",
-    "insufficientDiskSpace": "Insufficient disk space"
+    "insufficientDiskSpace": "Insufficient disk space",
+    "folderNotSelected": "No folder selected"
 }

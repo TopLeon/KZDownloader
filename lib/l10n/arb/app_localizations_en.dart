@@ -1365,4 +1365,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diskSpace => 'Disk Space';
+
+  @override
+  String get folderNotSelected => 'No folder selected';
 }
