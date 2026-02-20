@@ -19,13 +19,16 @@
 
 ---
 
+> [!WARNING]
+> **KZDownloader è attualmente in beta.** Potrebbero essere presenti bug o funzionalità incomplete. Segnala eventuali problemi sull'[issue tracker](../../issues).
+
 <a id="italian"></a>
 
 ## Panoramica
 
-KZDownloader è un'applicazione desktop cross-platform realizzata con Flutter per scaricare video, musica e file generici da centinaia di siti web. Integra un assistente AI in grado di riassumere video di YouTube e rispondere a domande su di essi.
+KZDownloader è un'applicazione desktop cross-platform realizzata con Flutter per scaricare video, musica e file generici da centinaia di siti web. Integra un assistente AI in grado di riassumere video di YouTube e rispondere a domande su di essi. 
 
-L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **File generici** — ognuna con la propria vista e i propri controlli. Il design è moderno, minimale e completamente reattivo, con bordi animati a gradiente neon/arcobaleno sulle card di download e sugli elementi interattivi, transizioni fluide e feedback in tempo reale.
+Il design è moderno, minimale e completamente reattivo, con bordi animati a gradiente neon/arcobaleno sulle card di download e sugli elementi interattivi, transizioni fluide e feedback in tempo reale.
 
 ## ✨ Funzionalità
 
@@ -38,7 +41,10 @@ L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **F
 - Estrazione solo audio in **MP3, M4A, OGG (Vorbis)**.
 
 ### 📁 Downloader Generico
-- Download a **chunk multipli**, in stile IDM, per qualsiasi link HTTP/HTTPS diretto.
+- Scaricamento veloce a **chunk multipli**, in stile IDM, per qualsiasi link HTTP/HTTPS diretto.
+  - **Writer Isolate**: un Dart isolate dedicato scrive i dati direttamente nella posizione finale del file tramite `RandomAccessFile`, eliminando file temporanei e passaggi I/O ridondanti.
+  - **Controllo del backpressure (ackIterator)**: ogni worker di rete attende la conferma di scrittura su disco da parte del Writer Isolate prima di scaricare altri dati — prevenendo crash per Out-of-Memory quando la velocità di rete supera quella di scrittura del disco.
+  - **Dynamic Connection Reuse**: al termine del proprio intervallo di byte, una connessione viene immediatamente riassegnata al chunk più lento, mantenendo il massimo numero di connessioni attive in ogni momento per velocità di download costantemente al picco.
 - **Ripresa automatica** — i download interrotti riprendono da dove si erano fermati se il server supporta le range request.
 - Visualizzazione del progresso per ogni chunk con contatore dei worker attivi e barre di avanzamento per segmento.
 - Backend HTTP basato su Rust ([rhttp_plus](https://pub.dev/packages/rhttp_plus)) per la massima velocità e per il **TLS fingerprinting**, che consente di aggirare i sistemi anti-bot su server protetti.
@@ -89,6 +95,10 @@ L'interfaccia è organizzata in sezioni dedicate — **Video**, **Musica** e **F
 </p>
 &nbsp;
 
+## ⬇️ Download
+
+I binari precompilati per Windows, macOS e Linux sono disponibili direttamente nella sezione [**Releases**](../../releases) — nessun ambiente di build necessario.
+
 ## 🏗️ Architettura e Stack Tecnologico
 
 | Livello | Tecnologia |
@@ -112,11 +122,7 @@ KZDownloader scarica e gestisce automaticamente i seguenti strumenti esterni nel
 |---|---|
 | **yt-dlp** | Download di video/audio ed estrazione metadati |
 | **ffmpeg** | Post-processing, remuxing ed estrazione audio |
-| **deno** | Supporto scripting per operazioni avanzate |
-
-## ⬇️ Download
-
-I binari precompilati per Windows, macOS e Linux sono disponibili direttamente nella sezione [**Releases**](../../releases) — nessun ambiente di build necessario.
+| **deno** | Necessario a ytdlp per estrarre i dati |
 
 ## 🚀 Avvio Rapido
 
@@ -130,7 +136,7 @@ I binari precompilati per Windows, macOS e Linux sono disponibili direttamente n
 
 ```bash
 # Clona il repository
-git clone https://github.com/your-username/KZDownloader.git
+git clone https://github.com/TopLeon/KZDownloader.git
 cd KZDownloader
 
 # Installa le dipendenze Flutter
@@ -151,7 +157,7 @@ Al primo avvio KZDownloader:
 
 Per le funzionalità AI, apri le **Impostazioni** e scegli un provider:
 - **Ollama**: installa [Ollama](https://ollama.com) in locale e scarica un modello (es. `ollama pull llama3`).
-- **OpenAI / Google**: inserisci la tua chiave API nel pannello Impostazioni — verrà salvata nel keychain del sistema operativo.
+- **OpenAI / Google**: inserisci la tua chiave API nel pannello Impostazioni o al primo avvio — verrà salvata nel keychain del sistema operativo.
 
 ## 📋 Piattaforme Supportate
 
@@ -159,8 +165,8 @@ Per le funzionalità AI, apri le **Impostazioni** e scegli un provider:
 |---|---|
 | Windows | ✅ Pieno supporto |
 | macOS | ✅ Pieno supporto (layout adattato) |
-| Linux | ✅ Pieno supporto |
-| Android / iOS | ⚠️ Non supportato |
+| Linux | ⚠️ Bisogna testare |
+| Android / iOS | ❌ Non supportato |
 
 ## 🗂️ Struttura del Progetto
 
@@ -183,6 +189,13 @@ lib/
 │   └── widgets/               # Dialog e widget condivisi
 └── l10n/arb/                  # Localizzazione (EN / IT)
 ```
+
+## 🗺️ Roadmap
+
+| Funzionalità | Stato |
+|---|---|
+| **Integrazione con il browser** — cattura i download direttamente da Chrome / Firefox tramite un'estensione companion | 🔜 In programma |
+| **Supporto streaming HLS / M3U8** — download e remux di stream video adattivi | 🔜 In programma |
 
 ## 🤝 Contribuire
 
