@@ -27,6 +27,11 @@ KZDownloader is a cross-platform desktop application built with Flutter that let
 
 The interface is organized into dedicated sections — **Videos**, **Music**, and **Generic files** — each with its own tailored view and controls. The design is modern, minimal, and fully reactive, featuring animated neon/rainbow gradient borders on download cards and interactive elements, smooth transitions, and real-time progress feedback.
 
+## 🕹️ Demo
+
+<video src="./img/demo.mp4" controls="controls" autoplay="autoplay" loop="loop" muted="muted" style="max-width: 100%;">
+</video>
+
 ## ✨ Features
 
 ### 🎬 Video & Audio Downloads
@@ -66,7 +71,7 @@ The interface is organized into dedicated sections — **Videos**, **Music**, an
 - **Download directory** selection with onboarding prompt on first launch.
 - Default **format**, **quality**, and **audio format** presets.
 - **Dark / Light / System** theme with smooth transitions.
-- **Interface language**: English 🇬🇧 and Italian 🇮🇹.
+- **Interface language**: English and Italian.
 - Configurable **concurrent downloads** per-playlist and globally.
 - AI model and provider selection with API key management.
 
@@ -76,6 +81,13 @@ The interface is organized into dedicated sections — **Videos**, **Music**, an
 - Animated **neon gradient borders** (`RainbowAnimatedBorder`) around download cards and interactive elements, rendered via a custom `CustomPainter`.
 - Glassmorphism glow blobs on the home screen and smooth CSS-style transitions throughout.
 - Responsive layout with separate view adaptations for Windows/Linux and macOS.
+
+&nbsp;
+<p align="center">
+  <img src="./img/1.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./img/2.png" width="45%">
+</p>
+&nbsp;
 
 ## 🏗️ Architecture & Tech Stack
 
