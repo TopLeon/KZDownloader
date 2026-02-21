@@ -97,7 +97,7 @@ Il design è moderno, minimale e completamente reattivo, con bordi animati a gra
 
 ## ⬇️ Download
 
-I binari precompilati per Windows, macOS e Linux sono disponibili direttamente nella sezione [**Releases**](../../releases) — nessun ambiente di build necessario.
+I binari precompilati per Windows e macOS sono disponibili direttamente nella sezione [**Releases**](../../releases) — nessun ambiente di build necessario.
 
 > ⚠️ Utenti macOS: poiché l'app è attualmente autofirmata, Gatekeeper la bloccherà al primo avvio. Per eseguirla, fai clic con il pulsante destro del mouse sull'app, seleziona Apri, quindi fai nuovamente clic su Apri nella finestra di dialogo.
 

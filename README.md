@@ -97,7 +97,7 @@ The design is modern, minimal, and fully reactive, featuring animated neon/rainb
 
 ## ⬇️ Download
 
-Pre-compiled binaries for Windows, macOS, and Linux are available directly in the [**Releases**](../../releases) section — no build environment needed.
+Pre-compiled binaries for Windows and macOS are available directly in the [**Releases**](../../releases) section — no build environment needed.
 
 > ⚠️ macOS Users: Since the app is currently self-signed, Gatekeeper will block it on first launch. To run it, Right-click the app, select Open, and then click Open again in the dialog box.
 
