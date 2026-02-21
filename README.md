@@ -199,6 +199,11 @@ lib/
 | **Browser integration** — capture downloads directly from Chrome / Firefox via a companion extension | 🔜 Planned |
 | **HLS / M3U8 streaming support** — download and remux adaptive video streams | 🔜 Planned |
 
+## ⚠️ Known Issues
+
+- Playlist Cards have problems with neon animated border
+- The playlist detail pane shows "Downloaded" while the playlist is not fully downloaded yet
+
 ## 🤝 Contributing
 
 Contributions, bug reports and feature requests are welcome. Please open an issue or submit a pull request.
