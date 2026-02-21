@@ -38,5 +38,14 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+
+    # Force the rhttp_plus plugin to link the missing macOS framework
+    if target.name.include?('rhttp_plus')
+      target.build_configurations.each do |config|
+        config.build_settings['OTHER_LDFLAGS'] ||= ['$(inherited)']
+        config.build_settings['OTHER_LDFLAGS'] << '-framework SystemConfiguration'
+        config.build_settings['OTHER_LDFLAGS'] << '-framework CoreFoundation'
+      end
+    end
   end
 end

@@ -581,8 +581,9 @@ class DownloadList extends _$DownloadList {
     final currentTask = await db.getTask(taskId);
     if (currentTask == null) return false;
     if (currentTask.title != null && currentTask.title!.isNotEmpty) return true;
-    if (UrlUtils.detectProvider(url) != 'yt-dlp' && provider != 'yt-dlp')
+    if (UrlUtils.detectProvider(url) != 'yt-dlp' && provider != 'yt-dlp') {
       return false;
+    }
 
     try {
       final ytDlp = YtDlpService();
