@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:kzdownloader/views/chat/screens/chat_screen.dart';
@@ -847,9 +846,9 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
                 color: const Color(0xFF1C1C1E),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: SelectableText(
+              child: const SelectableText(
                 'ollama pull $defaultModel',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'monospace',
                   color: Colors.greenAccent,
                   fontSize: 13,

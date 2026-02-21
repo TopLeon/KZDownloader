@@ -16,6 +16,7 @@ migrate_working_dir/
 macos/Flutter/ephemeral/
 macos/Flutter/Generated.xcconfig
 macos/Runner/Configs/AppInfo.xcconfig
+macos/build
 
 # personal
 new_screenshots/
