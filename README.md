@@ -95,6 +95,13 @@ The design is modern, minimal, and fully reactive, featuring animated neon/rainb
 </p>
 &nbsp;
 
+## 🕹️ Demo
+
+
+https://github.com/user-attachments/assets/72707ddb-4424-479b-a487-96114dd70004
+
+
+
 ## ⬇️ Download
 
 Pre-compiled binaries for Windows and macOS are available directly in the [**Releases**](../../releases) section — no build environment needed.
