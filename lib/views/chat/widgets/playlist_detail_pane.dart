@@ -284,7 +284,7 @@ class _PlaylistOverview extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(width: 12),
-                    if (playlist.playlistCompletedVideos ==
+                    if (playlist.playlistCompletedVideos != null && playlist.playlistCompletedVideos ==
                         playlist.playlistTotalVideos)
                       Row(
                         mainAxisSize: MainAxisSize.min,
