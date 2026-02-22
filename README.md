@@ -208,8 +208,8 @@ lib/
 
 ## ⚠️ Known Issues
 
-- Playlist Cards have problems with neon animated border
-- The playlist detail pane shows "Downloaded" while the playlist is not fully downloaded yet
+- ~Playlist Cards have problems with neon animated border~
+- ~The playlist detail pane shows "Downloaded" while the playlist is not fully downloaded yet~
 
 ## 🤝 Contributing
 

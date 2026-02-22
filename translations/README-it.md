@@ -95,6 +95,13 @@ Il design è moderno, minimale e completamente reattivo, con bordi animati a gra
 </p>
 &nbsp;
 
+## 🕹️ Demo
+
+
+https://github.com/user-attachments/assets/72707ddb-4424-479b-a487-96114dd70004
+
+
+
 ## ⬇️ Download
 
 I binari precompilati per Windows e macOS sono disponibili direttamente nella sezione [**Releases**](../../releases) — nessun ambiente di build necessario.
