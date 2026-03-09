@@ -83,18 +83,6 @@ The design is modern, minimal, and fully reactive, featuring animated neon/rainb
 - Glassmorphism glow blobs on the home screen and smooth CSS-style transitions throughout.
 - Responsive layout with separate view adaptations for Windows/Linux and macOS.
 
-&nbsp;
-<p align="center">
-  <img src="./img/1.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./img/2.png" width="45%">
-</p>
-&nbsp;
-<p align="center">
-  <img src="./img/3.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./img/4.png" width="45%">
-</p>
-&nbsp;
-
 ## 🕹️ Demo
 
 

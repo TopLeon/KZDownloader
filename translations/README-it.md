@@ -83,18 +83,6 @@ Il design è moderno, minimale e completamente reattivo, con bordi animati a gra
 - Effetti glow glassmorphism sulla schermata iniziale e transizioni fluide nell'intera UI.
 - Layout responsive con adattamenti separati per Windows/Linux e macOS.
 
-&nbsp;
-<p align="center">
-  <img src="../img/1.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="../img/2.png" width="45%">
-</p>
-&nbsp;
-<p align="center">
-  <img src="../img/3.png" width="45%">&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="../img/4.png" width="45%">
-</p>
-&nbsp;
-
 ## 🕹️ Demo
 
 
