@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import 'package:ultimate_flutter_icons/ficon.dart';
 import 'package:ultimate_flutter_icons/icons/ri.dart';
 import 'package:open_file/open_file.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
+import 'package:kzdownloader/core/utils/utils.dart';
 
 part 'playlist_detail_pane.g.dart';
 
@@ -99,7 +101,16 @@ class YouTubePlaylistDetailPane extends ConsumerWidget {
           ));
     }
 
-    // Main playlist view
+    // For M3U8 containers, show M3U8-specific detail view.
+    // Use isPlaylistContainer (set by M3U8Strategy at runtime) rather than
+    // URL extension — many HLS streams have no .m3u8 in the URL.
+    final isM3U8 =
+        playlist.isPlaylistContainer && !UrlUtils.isYouTubePlaylist(playlist.url);
+    if (isM3U8) {
+      return _M3U8DetailView(playlist: playlist);
+    }
+
+    // Main YT playlist view
     return _PlaylistOverview(playlist: playlist);
   }
 }
@@ -218,11 +229,47 @@ class _PlaylistOverview extends ConsumerWidget {
               ),
             const SizedBox(height: 16),
 
-            // Title
-            Text(
-              updatedPlaylist.title ?? l10n.playlist,
-              style: GoogleFonts.montserrat(
-                  fontSize: 20, fontWeight: FontWeight.w600, height: 1.2),
+            // Title and Control Actions
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    updatedPlaylist.title ?? l10n.playlist,
+                    style: GoogleFonts.montserrat(
+                        fontSize: 20, fontWeight: FontWeight.w600, height: 1.2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (updatedPlaylist.downloadStatus == WorkStatus.running ||
+                    updatedPlaylist.downloadStatus == WorkStatus.pending)
+                  IconButton(
+                    icon: const FIcon(RI.RiPauseFill),
+                    onPressed: () => ref
+                        .read(downloadListProvider.notifier)
+                        .pauseTask(updatedPlaylist.id),
+                    tooltip: l10n.actionPause,
+                  )
+                else if (updatedPlaylist.downloadStatus == WorkStatus.paused)
+                  IconButton(
+                    icon: const FIcon(RI.RiPlayFill),
+                    onPressed: () => ref
+                        .read(downloadListProvider.notifier)
+                        .resumeTask(updatedPlaylist.id),
+                    tooltip: l10n.actionResume,
+                  ),
+                if (updatedPlaylist.downloadStatus == WorkStatus.running ||
+                    updatedPlaylist.downloadStatus == WorkStatus.pending ||
+                    updatedPlaylist.downloadStatus == WorkStatus.paused)
+                  IconButton(
+                    icon: const FIcon(RI.RiCloseFill),
+                    onPressed: () => ref
+                        .read(downloadListProvider.notifier)
+                        .cancelTask(updatedPlaylist.id),
+                    tooltip: l10n.cancel,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+              ],
             ),
             const SizedBox(height: 2),
 
@@ -284,8 +331,9 @@ class _PlaylistOverview extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(width: 12),
-                    if (playlist.playlistCompletedVideos != null && playlist.playlistCompletedVideos ==
-                        playlist.playlistTotalVideos)
+                    if (playlist.playlistCompletedVideos != null &&
+                        playlist.playlistCompletedVideos ==
+                            playlist.playlistTotalVideos)
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -405,11 +453,14 @@ class _PlaylistVideoItemState extends ConsumerState<_PlaylistVideoItem> {
     // Watch live progress for immediate UI updates
     final liveProgressMap = ref.watch(activeDownloadProgressProvider);
     final live = liveProgressMap[widget.video.id];
-    
+
     // Consider downloading active if status is 'downloading' OR if there's live progress data
-    final isDownloading = widget.video.downloadStatus == WorkStatus.running || live != null;
-    final effectiveProgress = (live?['progress'] as double?) ?? widget.video.progress;
-    final effectiveSpeed = (live?['downloadSpeed'] as String?) ?? widget.video.downloadSpeed;
+    final isDownloading =
+        widget.video.downloadStatus == WorkStatus.running || live != null;
+    final effectiveProgress =
+        (live?['progress'] as double?) ?? widget.video.progress;
+    final effectiveSpeed =
+        (live?['downloadSpeed'] as String?) ?? widget.video.downloadSpeed;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -567,5 +618,343 @@ class _PlaylistVideoItemState extends ConsumerState<_PlaylistVideoItem> {
     }
 
     return Icon(icon, color: color, size: 24);
+  }
+}
+
+/// M3U8-specific detail view: shows variant info, segment progress, and file path.
+class _M3U8DetailView extends ConsumerWidget {
+  final DownloadTask playlist;
+
+  const _M3U8DetailView({required this.playlist});
+
+  Map<String, dynamic>? _parseVariantMeta(String? json) {
+    if (json == null || json.isEmpty) return null;
+    try {
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _formatBandwidth(int? bps) {
+    if (bps == null) return 'Unknown';
+    if (bps >= 1000000) return '${(bps / 1000000).toStringAsFixed(1)} Mbps';
+    if (bps >= 1000) return '${(bps / 1000).toStringAsFixed(0)} kbps';
+    return '$bps bps';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+
+    final allTasksAsync = ref.watch(downloadListProvider);
+    final updatedPlaylist = allTasksAsync.when(
+      data: (tasks) => tasks.firstWhere(
+        (task) => task.id == playlist.id,
+        orElse: () => playlist,
+      ),
+      loading: () => playlist,
+      error: (_, __) => playlist,
+    );
+
+    final variantMeta = _parseVariantMeta(updatedPlaylist.stepDetailsJson);
+    final liveProgressMap = ref.watch(activeDownloadProgressProvider);
+    final live = liveProgressMap[updatedPlaylist.id];
+    final isDownloading =
+        updatedPlaylist.downloadStatus == WorkStatus.running || live != null;
+    final effectiveProgress =
+        (live?['progress'] as double?) ?? updatedPlaylist.progress;
+
+    return Container(
+      width: MediaQuery.of(context).size.width * 0.35 < 600
+          ? MediaQuery.of(context).size.width * 0.35
+          : 600,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          left: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
+        ),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // HLS Badge + Action buttons
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'HLS Stream',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (isDownloading)
+                  IconButton(
+                    icon: const FIcon(RI.RiPauseFill),
+                    onPressed: () => ref
+                        .read(downloadListProvider.notifier)
+                        .pauseTask(updatedPlaylist.id),
+                    tooltip: l10n.actionPause,
+                  )
+                else if (updatedPlaylist.downloadStatus == WorkStatus.paused)
+                  IconButton(
+                    icon: const FIcon(RI.RiPlayFill),
+                    onPressed: () => ref
+                        .read(downloadListProvider.notifier)
+                        .resumeTask(updatedPlaylist.id),
+                    tooltip: l10n.actionResume,
+                  ),
+                if (updatedPlaylist.downloadStatus == WorkStatus.running ||
+                    updatedPlaylist.downloadStatus == WorkStatus.pending ||
+                    updatedPlaylist.downloadStatus == WorkStatus.paused)
+                  IconButton(
+                    icon: const FIcon(RI.RiCloseFill),
+                    onPressed: () => ref
+                        .read(downloadListProvider.notifier)
+                        .cancelTask(updatedPlaylist.id),
+                    tooltip: l10n.cancel,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Title
+            Text(
+              updatedPlaylist.title ?? 'M3U8 Video',
+              style: GoogleFonts.montserrat(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+
+            // URL (muted)
+            Text(
+              updatedPlaylist.url,
+              style: GoogleFonts.notoSans(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 20),
+
+            // Variant metadata info rows
+            if (variantMeta != null) ...[
+              _buildInfoRow(
+                context,
+                icon: RI.RiFullscreenLine,
+                label: 'Resolution',
+                value: variantMeta['resolution'] as String? ?? 'Unknown',
+              ),
+              const SizedBox(height: 8),
+              _buildInfoRow(
+                context,
+                icon: RI.RiSpeedLine,
+                label: 'Bandwidth',
+                value: _formatBandwidth(variantMeta['bandwidth'] as int?),
+              ),
+              if (variantMeta['codecs'] != null) ...[
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  context,
+                  icon: RI.RiCodeLine,
+                  label: 'Codecs',
+                  value: variantMeta['codecs'] as String,
+                ),
+              ],
+              if (variantMeta['frameRate'] != null) ...[
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  context,
+                  icon: RI.RiFilmLine,
+                  label: 'Frame Rate',
+                  value:
+                      '${(variantMeta['frameRate'] as num).toStringAsFixed(0)} fps',
+                ),
+              ],
+              const SizedBox(height: 16),
+            ],
+
+            // Segment progress
+            if (updatedPlaylist.playlistTotalVideos != null &&
+                updatedPlaylist.playlistTotalVideos! > 0) ...[
+              Divider(color: colorScheme.outlineVariant.withOpacity(0.5)),
+              const SizedBox(height: 8),
+              Text(
+                'Segments',
+                style: GoogleFonts.montserrat(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: effectiveProgress,
+                        backgroundColor: colorScheme.primary.withOpacity(0.15),
+                        minHeight: 6,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${updatedPlaylist.playlistCompletedVideos ?? 0}/${updatedPlaylist.playlistTotalVideos}',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${(effectiveProgress * 100).toStringAsFixed(1)}%',
+                style: GoogleFonts.notoSans(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Status
+            _buildInfoRow(
+              context,
+              icon: RI.RiDownloadLine,
+              label: 'Status',
+              value: _statusText(updatedPlaylist.downloadStatus, l10n),
+            ),
+            const SizedBox(height: 8),
+
+            // Date
+            _buildInfoRow(
+              context,
+              icon: RI.RiCalendarLine,
+              label: 'Date',
+              value: DateFormat('dd MMM yyyy HH:mm',
+                      Localizations.localeOf(context).toString())
+                  .format(updatedPlaylist.createdAt),
+            ),
+            const SizedBox(height: 16),
+
+            // Open folder button
+            if (updatedPlaylist.dirPath != null)
+              OutlinedButton.icon(
+                onPressed: () => OpenFile.open(updatedPlaylist.dirPath),
+                icon: const FIcon(RI.RiFolderOpenLine),
+                label: Text(l10n.openFolder),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  backgroundColor: colorScheme.tertiary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  side:
+                      BorderSide(color: colorScheme.primary.withOpacity(0.15)),
+                ),
+              ),
+
+            // Error message
+            if (updatedPlaylist.errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colorScheme.error.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline,
+                        color: colorScheme.error, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        updatedPlaylist.errorMessage!,
+                        style: GoogleFonts.notoSans(
+                          fontSize: 12,
+                          color: colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(
+    BuildContext context, {
+    required dynamic icon,
+    required String label,
+    required String value,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        FIcon(icon, size: 16, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: GoogleFonts.notoSans(
+            fontSize: 13,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: GoogleFonts.montserrat(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _statusText(WorkStatus status, AppLocalizations l10n) {
+    switch (status) {
+      case WorkStatus.completed:
+        return l10n.downloaded;
+      case WorkStatus.running:
+        return 'Downloading';
+      case WorkStatus.paused:
+        return l10n.actionPause;
+      case WorkStatus.failed:
+        return 'Failed';
+      case WorkStatus.cancelled:
+        return 'Cancelled';
+      default:
+        return 'Pending';
+    }
   }
 }

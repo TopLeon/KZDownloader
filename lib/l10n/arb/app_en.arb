@@ -476,9 +476,6 @@
     "code": "Code",
     "executable": "Executable",
     "file": "File",
-    "qualityMode": "Quality Mode",
-    "qualityModeSimple": "Simple",
-    "qualityModeExpert": "Expert",
     "hour": "hour",
     "hours": "hours",
     "minute": "minute",
@@ -527,5 +524,42 @@
     "queued": "Queued",
     "diskSpace": "Disk Space",
     "insufficientDiskSpace": "Insufficient disk space",
-    "folderNotSelected": "No folder selected"
+    "folderNotSelected": "No folder selected",
+    "m3u8Playlist": "M3U8 Playlist",
+    "pauseAll": "Pause All",
+    "resumeAll": "Resume All",
+    "cancelAll": "Cancel All",
+    "activeDownloadsCount": "{count} downloads",
+    "@activeDownloadsCount": {
+        "placeholders": {
+            "count": {
+                "type": "String"
+            }
+        }
+    },
+    "pausedDownloads": "Paused",
+    "downloadProgress": "{progress}%",
+    "@downloadProgress": {
+        "placeholders": {
+            "progress": {
+                "type": "String"
+            }
+        }
+    },
+    "singleDownload": "{count} download",
+    "@singleDownload": {
+        "placeholders": {
+            "count": {
+                "type": "String"
+            }
+        }
+    },
+    "cancelAllConfirmTitle": "Cancel All Downloads?",
+    "cancelAllConfirmMessage": "This will cancel all active and paused downloads. This action cannot be undone.",
+    "exportM3u8": "Export M3U8",
+    "importM3u8": "Import M3U8",
+    "exportSuccess": "Export successful",
+    "importSuccess": "Import successful",
+    "noMatchingTracks": "No matching tracks found",
+    "autoplay": "Autoplay"
 }

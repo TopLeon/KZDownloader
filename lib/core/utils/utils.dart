@@ -153,6 +153,33 @@ class UrlUtils {
       return null;
     }
   }
+
+  /// Returns true if the URL path ends with a known M3U8 file extension.
+  ///
+  /// This is a **best-effort fast-path hint** based solely on the URL path.
+  /// A `.m3u8` extension strongly suggests HLS content, but many M3U8 streams
+  /// are served from URLs with no recognisable extension.  For definitive
+  /// detection, always check the `Content-Type` response header using
+  /// [isM3U8ContentType] after a HEAD/GET request.
+  static bool isM3U8Playlist(String url) {
+    try {
+      final uri = Uri.parse(url);
+      final path = uri.path.toLowerCase();
+      return path.endsWith('.m3u8') || path.endsWith('.m3u');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Checks if the Content-Type indicates an M3U8 playlist.
+  static bool isM3U8ContentType(String? contentType) {
+    if (contentType == null) return false;
+    final ct = contentType.toLowerCase().split(';').first.trim();
+    return ct == 'application/vnd.apple.mpegurl' ||
+        ct == 'audio/mpegurl' ||
+        ct == 'application/x-mpegurl' ||
+        ct == 'audio/x-mpegurl';
+  }
 }
 
 // Calculates the elapsed time since [startTime] and returns a human-readable string.
@@ -231,9 +258,30 @@ String calculateProcessTime(DateTime startTime, [BuildContext? context]) {
 class FileUtils {
   /// Reserved Windows device names (case-insensitive).
   static const _windowsReservedNames = {
-    'CON', 'PRN', 'AUX', 'NUL',
-    'COM0', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-    'LPT0', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+    'CON',
+    'PRN',
+    'AUX',
+    'NUL',
+    'COM0',
+    'COM1',
+    'COM2',
+    'COM3',
+    'COM4',
+    'COM5',
+    'COM6',
+    'COM7',
+    'COM8',
+    'COM9',
+    'LPT0',
+    'LPT1',
+    'LPT2',
+    'LPT3',
+    'LPT4',
+    'LPT5',
+    'LPT6',
+    'LPT7',
+    'LPT8',
+    'LPT9',
   };
 
   /// Returns a version of [name] that is safe to use as a filename on

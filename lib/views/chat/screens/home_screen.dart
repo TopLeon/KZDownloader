@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kzdownloader/core/providers/quality_provider.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
 import 'package:kzdownloader/views/chat/widgets/input/chat_input_area.dart';
 import 'package:kzdownloader/views/chat/widgets/window_button.dart';
@@ -12,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 
 class HomeScreen extends ConsumerWidget {
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String selectedProvider;
   final bool showVideoOptions;
   final bool isAudio;
@@ -21,6 +21,8 @@ class HomeScreen extends ConsumerWidget {
   final bool showInitialAnimation;
   final VoidCallback onSubmit;
   final Function(String) onProviderChanged;
+  final String selectedQuality;
+  final Function(String) onQualityChanged;
   final Function(bool) onIsAudioChanged;
   final Function(bool) onSummarizeOnlyChanged;
   final Function(bool) onPrefetchStateChanged;
@@ -29,10 +31,14 @@ class HomeScreen extends ConsumerWidget {
   final String checksumAlgorithm;
   final Function(String)? onChecksumChanged;
   final Function(String)? onAlgorithmChanged;
+  final Function(int)? onM3U8VariantIndexChanged;
+  final Function(int)? onParallelDownloadsChanged;
+  final Function(Set<int>)? onSelectedVideoIndicesChanged;
 
   const HomeScreen({
     super.key,
     required this.controller,
+    this.focusNode,
     required this.selectedProvider,
     required this.showVideoOptions,
     required this.isAudio,
@@ -42,6 +48,8 @@ class HomeScreen extends ConsumerWidget {
     required this.showInitialAnimation,
     required this.onSubmit,
     required this.onProviderChanged,
+    required this.selectedQuality,
+    required this.onQualityChanged,
     required this.onIsAudioChanged,
     required this.onSummarizeOnlyChanged,
     required this.onPrefetchStateChanged,
@@ -50,6 +58,9 @@ class HomeScreen extends ConsumerWidget {
     this.checksumAlgorithm = 'MD5',
     this.onChecksumChanged,
     this.onAlgorithmChanged,
+    this.onM3U8VariantIndexChanged,
+    this.onParallelDownloadsChanged,
+    this.onSelectedVideoIndicesChanged,
   });
 
   @override
@@ -57,7 +68,6 @@ class HomeScreen extends ConsumerWidget {
     final size = MediaQuery.of(context).size;
     final colorScheme = Theme.of(context).colorScheme;
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
-    final qualitySettingsAsync = ref.watch(qualitySettings_Provider);
 
     return MouseRegion(
       child: Stack(
@@ -99,105 +109,58 @@ class HomeScreen extends ConsumerWidget {
                   Center(
                     child: SizedBox(
                       width: 620,
-                      child: qualitySettingsAsync.when(
-                        data: (qualitySettings) => ChatInputArea(
-                          controller: controller,
-                          selectedProvider: selectedProvider,
-                          showVideoOptions: showVideoOptions,
-                          selectedQuality: qualitySettings.toDisplayString(),
-                          isAudio: isAudio,
-                          summarizeOnly: isSummaryMode,
-                          isCentered: true,
-                          qualityMode: qualitySettings.mode,
-                          onSubmit: onSubmit,
-                          onProviderChanged: onProviderChanged,
-                          onQualityChanged: (value) async {
-                            // Convert display string back to quality enum
-                            DownloadQuality newQuality;
-                            if (qualitySettings.mode == QualityMode.simple) {
-                              if (value == 'Best') {
-                                newQuality = DownloadQuality.best;
-                              } else if (value == 'High') {
-                                newQuality = DownloadQuality.high;
-                              } else if (value == 'Medium') {
-                                newQuality = DownloadQuality.medium;
-                              } else {
-                                newQuality = DownloadQuality.low;
-                              }
-                            } else {
-                              if (value == '2160p') {
-                                newQuality = DownloadQuality.p2160;
-                              } else if (value == '1440p') {
-                                newQuality = DownloadQuality.p1440;
-                              } else if (value == '1080p') {
-                                newQuality = DownloadQuality.p1080;
-                              } else if (value == '720p') {
-                                newQuality = DownloadQuality.p720;
-                              } else {
-                                newQuality = DownloadQuality.p480;
-                              }
-                            }
-                            await ref
-                                .read(qualitySettings_Provider.notifier)
-                                .setQuality(newQuality);
-                          },
-                          onIsAudioChanged: onIsAudioChanged,
-                          onSummarizeOnlyChanged: onSummarizeOnlyChanged,
-                          onPrefetchStateChanged: onPrefetchStateChanged,
-                          onMetadataFetched: onMetadataFetched,
-                          expectedChecksum: expectedChecksum,
-                          checksumAlgorithm: checksumAlgorithm,
-                          onChecksumChanged: onChecksumChanged != null
-                              ? (val) => onChecksumChanged!(val)
-                              : null,
-                          onAlgorithmChanged: onAlgorithmChanged != null
-                              ? (val) => onAlgorithmChanged!(val)
-                              : null,
-                        ),
-                        loading: () => ChatInputArea(
-                          controller: controller,
-                          selectedProvider: selectedProvider,
-                          showVideoOptions: showVideoOptions,
-                          selectedQuality: 'Best',
-                          isAudio: isAudio,
-                          summarizeOnly: isSummaryMode,
-                          isCentered: true,
-                          qualityMode: QualityMode.simple,
-                          onSubmit: onSubmit,
-                          onProviderChanged: (value) => {},
-                          onQualityChanged: (value) {},
-                          onIsAudioChanged: (value) {},
-                          onSummarizeOnlyChanged: (value) {},
-                        ),
-                        error: (_, __) => ChatInputArea(
-                          controller: controller,
-                          selectedProvider: selectedProvider,
-                          showVideoOptions: showVideoOptions,
-                          selectedQuality: 'Best',
-                          isAudio: isAudio,
-                          summarizeOnly: isSummaryMode,
-                          isCentered: true,
-                          qualityMode: QualityMode.simple,
-                          onSubmit: onSubmit,
-                          onProviderChanged: (value) => {},
-                          onQualityChanged: (value) {},
-                          onIsAudioChanged: (value) {},
-                          onSummarizeOnlyChanged: (value) {},
-                        ),
+                      child: ChatInputArea(
+                        controller: controller,
+                        focusNode: focusNode,
+                        selectedProvider: selectedProvider,
+                        showVideoOptions: showVideoOptions,
+                        selectedQuality: selectedQuality,
+                        isAudio: isAudio,
+                        summarizeOnly: isSummaryMode,
+                        isCentered: true,
+                        onSubmit: onSubmit,
+                        onProviderChanged: onProviderChanged,
+                        onQualityChanged: onQualityChanged,
+                        onIsAudioChanged: onIsAudioChanged,
+                        onSummarizeOnlyChanged: onSummarizeOnlyChanged,
+                        onPrefetchStateChanged: onPrefetchStateChanged,
+                        onMetadataFetched: onMetadataFetched,
+                        expectedChecksum: expectedChecksum,
+                        checksumAlgorithm: checksumAlgorithm,
+                        onChecksumChanged: onChecksumChanged != null
+                            ? (val) => onChecksumChanged!(val)
+                            : null,
+                        onAlgorithmChanged: onAlgorithmChanged != null
+                            ? (val) => onAlgorithmChanged!(val)
+                            : null,
+                        onM3U8VariantIndexChanged:
+                            onM3U8VariantIndexChanged != null
+                                ? (idx) => onM3U8VariantIndexChanged!(idx)
+                                : null,
+                        onParallelDownloadsChanged:
+                            onParallelDownloadsChanged != null
+                                ? (val) => onParallelDownloadsChanged!(val)
+                                : null,
+                        onSelectedVideoIndicesChanged:
+                            onSelectedVideoIndicesChanged != null
+                                ? (indices) =>
+                                    onSelectedVideoIndicesChanged!(indices)
+                                : null,
                       ),
                     ),
                   ),
-                  Center(
-                    child: _buildStatusIndicator(
-                      context,
-                      colorScheme,
-                      showInitialAnimation,
-                      isPrefetchingMetadata,
-                      metadataFetchCompleted,
-                      controller.text,
-                      showVideoOptions,
+                  if (!(isPrefetchingMetadata && controller.text.isNotEmpty))
+                    Center(
+                      child: _buildStatusIndicator(
+                        context,
+                        colorScheme,
+                        showInitialAnimation,
+                        isPrefetchingMetadata,
+                        metadataFetchCompleted,
+                        controller.text,
+                        showVideoOptions,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

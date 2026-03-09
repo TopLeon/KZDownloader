@@ -34,6 +34,15 @@ class _PlaylistCardState extends ConsumerState<PlaylistCard> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.05),
+              width: 1,
+            )),
         title: Text(l10n.renamePlaylist),
         content: TextField(
           controller: controller,

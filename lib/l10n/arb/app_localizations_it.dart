@@ -1270,15 +1270,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get file => 'File';
 
   @override
-  String get qualityMode => 'Modalità Qualità';
-
-  @override
-  String get qualityModeSimple => 'Semplice';
-
-  @override
-  String get qualityModeExpert => 'Esperta';
-
-  @override
   String get hour => 'ora';
 
   @override
@@ -1377,4 +1368,59 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get folderNotSelected => 'Nessuna cartella selezionata';
+
+  @override
+  String get m3u8Playlist => 'Playlist M3U8';
+
+  @override
+  String get pauseAll => 'Pausa Tutti';
+
+  @override
+  String get resumeAll => 'Riprendi Tutti';
+
+  @override
+  String get cancelAll => 'Annulla Tutti';
+
+  @override
+  String activeDownloadsCount(String count) {
+    return '$count download';
+  }
+
+  @override
+  String get pausedDownloads => 'In pausa';
+
+  @override
+  String downloadProgress(String progress) {
+    return '$progress%';
+  }
+
+  @override
+  String singleDownload(String count) {
+    return '$count download';
+  }
+
+  @override
+  String get cancelAllConfirmTitle => 'Annullare tutti i download?';
+
+  @override
+  String get cancelAllConfirmMessage =>
+      'Questo annullerà tutti i download attivi e in pausa. L\'azione non può essere annullata.';
+
+  @override
+  String get exportM3u8 => 'Esporta M3U8';
+
+  @override
+  String get importM3u8 => 'Importa M3U8';
+
+  @override
+  String get exportSuccess => 'Esportazione completata';
+
+  @override
+  String get importSuccess => 'Importazione completata';
+
+  @override
+  String get noMatchingTracks => 'Nessun brano trovato';
+
+  @override
+  String get autoplay => 'Riproduzione Automatica';
 }

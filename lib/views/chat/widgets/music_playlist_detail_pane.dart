@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -5,12 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:kzdownloader/models/playlist.dart';
 import 'package:kzdownloader/core/download/providers/playlist_provider.dart';
 import 'package:kzdownloader/core/download/providers/download_provider.dart';
 import 'package:kzdownloader/models/download_task.dart';
 import 'package:kzdownloader/core/services/audio_player_service.dart';
+import 'package:kzdownloader/core/utils/m3u8_utils.dart';
 import 'package:kzdownloader/views/widgets/confirm_dialog.dart';
+import 'package:not_static_icons/not_static_icons.dart';
 import 'package:ultimate_flutter_icons/ficon.dart';
 import 'package:ultimate_flutter_icons/icons/ri.dart';
 import 'package:intl/intl.dart';
@@ -33,6 +37,64 @@ class PlaylistDetailPane extends ConsumerStatefulWidget {
 }
 
 class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
+  bool _autoplay = false;
+  StreamSubscription<ProcessingState>? _processingStateSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupAutoplayListener();
+  }
+
+  @override
+  void dispose() {
+    _processingStateSub?.cancel();
+    super.dispose();
+  }
+
+  void _setupAutoplayListener() {
+    final service = ref.read(audioPlayerServiceProvider);
+    _processingStateSub =
+        service.player.processingStateStream.listen((processingState) {
+      if (!_autoplay) return;
+      if (processingState != ProcessingState.completed) return;
+
+      // Get the currently playing task id
+      final currentTaskId = ref.read(currentlyPlayingProvider);
+      if (currentTaskId == null) return;
+
+      // Get the current playlist tracks
+      final playlists = ref.read(playlistListProvider);
+      final currentPlaylist = playlists.firstWhere(
+        (p) => p.id == widget.playlist.id,
+        orElse: () => widget.playlist,
+      );
+      final playlistTracks = currentPlaylist.tasks.toList();
+      if (playlistTracks.isEmpty) return;
+
+      // Find current track index and play the next one
+      final currentIndex =
+          playlistTracks.indexWhere((t) => t.id == currentTaskId);
+      if (currentIndex < 0) return;
+
+      final nextIndex = (currentIndex + 1) % playlistTracks.length;
+      final nextTrack = playlistTracks[nextIndex];
+      if (nextTrack.filePath != null) {
+        // Small delay to avoid race condition
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (!mounted) return;
+          ref.read(audioStateProvider.notifier).playAudio(
+                nextTrack.filePath!,
+                thumbnail: nextTrack.thumbnail,
+                title: nextTrack.title,
+                channel: nextTrack.channelName,
+                taskId: nextTrack.id,
+              );
+        });
+      }
+    });
+  }
+
   Future<void> _pickCoverImage() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -110,6 +172,78 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
     );
   }
 
+  Future<void> _exportM3U8(List<DownloadTask> tracks) async {
+    final l10n = AppLocalizations.of(context)!;
+
+    final content = M3U8Utils.exportPlaylistToM3U8(tracks);
+
+    final result = await FilePicker.platform.saveFile(
+      dialogTitle: l10n.exportM3u8,
+      fileName: '${widget.playlist.name}.m3u8',
+      type: FileType.any,
+    );
+
+    if (result != null) {
+      await File(result).writeAsString(content);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.exportSuccess)),
+      );
+    }
+  }
+
+  Future<void> _importM3U8() async {
+    final l10n = AppLocalizations.of(context)!;
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowedExtensions: null,
+      allowMultiple: false,
+    );
+
+    if (result == null || result.files.single.path == null) return;
+
+    final file = File(result.files.single.path!);
+    final content = await file.readAsString();
+    final entries = M3U8Utils.parseM3U8(content);
+
+    if (entries.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.noMatchingTracks)),
+      );
+      return;
+    }
+
+    // Match entries against existing download tasks by file path
+    final allTasks = await ref.read(downloadListProvider.future);
+    final entryPaths = entries.map((e) => e.path).toSet();
+
+    final matchedTasks = allTasks
+        .where((t) =>
+            t.filePath != null &&
+            entryPaths.contains(t.filePath) &&
+            t.downloadStatus.isSuccess)
+        .toList();
+
+    if (matchedTasks.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.noMatchingTracks)),
+      );
+      return;
+    }
+
+    await ref
+        .read(playlistListProvider.notifier)
+        .addTasksToPlaylist(widget.playlist.id, matchedTasks);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.importSuccess)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -125,6 +259,11 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
 
     // Get playlist tracks via IsarLinks
     final playlistTracks = currentPlaylist.tasks.toList();
+
+    // Watch currently playing track and its actual play state
+    final currentlyPlayingId = ref.watch(currentlyPlayingProvider);
+    final audioState = ref.watch(audioStateProvider);
+    final isAudioActuallyPlaying = audioState.isPlaying;
 
     return Container(
       width: MediaQuery.of(context).size.width * 0.3 < 550
@@ -226,19 +365,106 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Add Music button
-                  FilledButton.icon(
-                    onPressed: _showAddMusicDialog,
-                    icon: FIcon(RI.RiAddLine,
-                        size: 20, color: colorScheme.onPrimary),
-                    label: Text(l10n.addMusic),
-                    style: FilledButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                  // Add Music button + Autoplay toggle + M3U8 buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Add Music button
+                      FilledButton.icon(
+                        onPressed: _showAddMusicDialog,
+                        icon: FIcon(RI.RiAddLine,
+                            size: 20, color: colorScheme.onPrimary),
+                        label: Text(l10n.addMusic),
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+
+                      // Autoplay toggle
+                      Tooltip(
+                        message: l10n.autoplay,
+                        child: Container(
+                          height: 40,
+                          padding: const EdgeInsets.only(left: 16),
+                          decoration: BoxDecoration(
+                            color: _autoplay
+                                ? colorScheme.primary.withOpacity(0.1)
+                                : colorScheme.tertiary,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: _autoplay
+                                  ? colorScheme.primary.withOpacity(0.3)
+                                  : colorScheme.primary.withOpacity(0.15),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FIcon(
+                                RI.RiRepeatLine,
+                                size: 16,
+                                color: _autoplay
+                                    ? colorScheme.primary
+                                    : colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 4),
+                              SizedBox(
+                                height: 24,
+                                child: Transform.scale(
+                                  scale: 0.7,
+                                  child: Switch(
+                                    value: _autoplay,
+                                    onChanged: (value) =>
+                                        setState(() => _autoplay = value),
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
+
+                  // M3U8 Export/Import buttons
+                  if (playlistTracks.isNotEmpty)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _exportM3U8(playlistTracks),
+                          icon: FIcon(RI.RiDownloadLine,
+                              size: 16, color: colorScheme.onSurfaceVariant),
+                          label: Text(
+                            l10n.exportM3u8,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: _importM3U8,
+                          icon: FIcon(RI.RiUploadLine,
+                              size: 16, color: colorScheme.onSurfaceVariant),
+                          label: Text(
+                            l10n.importM3u8,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 12),
 
                   // Divider
                   if (playlistTracks.isNotEmpty)
@@ -273,11 +499,24 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
                     ...playlistTracks.asMap().entries.map((entry) {
                       final index = entry.key;
                       final track = entry.value;
-                      return _buildTrackItem(
-                        track,
-                        index + 1,
-                        colorScheme,
-                        ref,
+                      final isPlaying = currentlyPlayingId == track.id &&
+                          isAudioActuallyPlaying;
+                      return _TrackItemWidget(
+                        track: track,
+                        index: index + 1,
+                        isPlaying: isPlaying,
+                        onTap: () {
+                          if (track.filePath != null) {
+                            ref.read(audioStateProvider.notifier).playAudio(
+                                  track.filePath!,
+                                  thumbnail: track.thumbnail,
+                                  title: track.title,
+                                  channel: track.channelName,
+                                  taskId: track.id,
+                                );
+                          }
+                        },
+                        onRemove: () => _confirmRemoveTrack(track),
                       );
                     }),
                 ],
@@ -324,121 +563,183 @@ class _PlaylistDetailPaneState extends ConsumerState<PlaylistDetailPane> {
       ],
     );
   }
+}
 
-  Widget _buildTrackItem(
-    DownloadTask track,
-    int index,
-    ColorScheme colorScheme,
-    WidgetRef ref,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: colorScheme.tertiary,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.primary.withOpacity(0.15)),
-      ),
-      child: InkWell(
-        onTap: () {
-          // Play audio
-          if (track.filePath != null) {
-            ref.read(audioStateProvider.notifier).playAudio(
-                  track.filePath!,
-                  thumbnail: track.thumbnail,
-                  title: track.title,
-                  channel: track.channelName,
-                  taskId: track.id,
-                );
-          }
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // Track number
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    '$index',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.primary,
+// Stateful widget for individual track items with hover and playing state.
+class _TrackItemWidget extends StatefulWidget {
+  final DownloadTask track;
+  final int index;
+  final bool isPlaying;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  const _TrackItemWidget({
+    required this.track,
+    required this.index,
+    required this.isPlaying,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  @override
+  State<_TrackItemWidget> createState() => _TrackItemWidgetState();
+}
+
+class _TrackItemWidgetState extends State<_TrackItemWidget> {
+  bool _isHovered = false;
+  final _controller = AnimatedIconController();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final canPlay = widget.track.filePath != null;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: widget.isPlaying
+              ? colorScheme.tertiary
+              : _isHovered
+                  ? colorScheme.tertiary.withOpacity(0.5)
+                  : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: widget.isPlaying
+              ? Border.all(color: colorScheme.primary.withOpacity(0.15))
+              : null,
+          boxShadow: [
+            if (widget.isPlaying)
+              BoxShadow(
+                color: colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
+        child: InkWell(
+          onTap: canPlay ? widget.onTap : null,
+          borderRadius: BorderRadius.circular(16),
+          child: Opacity(
+            opacity: canPlay ? 1.0 : 0.6,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  // Track number / Playing indicator / Hover play icon
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Center(
+                      child: widget.isPlaying
+                          ? AudioLinesIcon(
+                              color: colorScheme.primary,
+                              controller: _controller,
+                              interactive: false,
+                              infiniteLoop: true,
+                              enableTouchInteraction: false,
+                              size: 20,
+                            )
+                          : _isHovered && canPlay
+                              ? Icon(
+                                  Icons.play_arrow_rounded,
+                                  size: 20,
+                                  color: colorScheme.onSurface,
+                                )
+                              : Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '${widget.index}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
+                  const SizedBox(width: 12),
 
-              // Thumbnail
-              if (track.thumbnail != null)
-                ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Transform.scale(
-                                  scale: 1.35,
-                      child: CachedNetworkImage(
-                        imageUrl: track.thumbnail!,
-                        fit: BoxFit.cover,
-                        height: 35,
-                        width: 35,
-                        filterQuality: FilterQuality.medium,
-                        errorWidget: (context, url, error) => Container(
-                          color: Theme.brightnessOf(context) == Brightness.dark
-                              ? Colors.grey[800]
-                              : Colors.grey[500],
-                          child: const Icon(Icons.music_note,
-                              size: 20, color: Colors.white54),
+                  // Thumbnail
+                  if (widget.track.thumbnail != null)
+                    ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Transform.scale(
+                          scale: 1.35,
+                          child: CachedNetworkImage(
+                            imageUrl: widget.track.thumbnail!,
+                            fit: BoxFit.cover,
+                            height: 35,
+                            width: 35,
+                            filterQuality: FilterQuality.medium,
+                            errorWidget: (context, url, error) => Container(
+                              color:
+                                  Theme.brightnessOf(context) == Brightness.dark
+                                      ? Colors.grey[800]
+                                      : Colors.grey[500],
+                              child: const Icon(Icons.music_note,
+                                  size: 20, color: Colors.white54),
+                            ),
+                          ),
+                        )),
+                  const SizedBox(width: 12),
+
+                  // Track info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.track.title ??
+                              AppLocalizations.of(context)!.unknownTrack,
+                          style: GoogleFonts.montserrat(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color:
+                                widget.isPlaying ? colorScheme.primary : null,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    )),
-              const SizedBox(width: 12),
-
-              // Track info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      track.title ?? AppLocalizations.of(context)!.unknownTrack,
-                      style: GoogleFonts.montserrat(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                        if (widget.track.channelName != null)
+                          Text(
+                            widget.track.channelName!,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 13,
+                              color: widget.isPlaying
+                                  ? colorScheme.primary.withOpacity(0.7)
+                                  : colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
                     ),
-                    if (track.channelName != null)
-                      Text(
-                        track.channelName!,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 13,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
+                  ),
+                  const SizedBox(width: 8),
 
-              // Remove button
-              IconButton(
-                icon: const FIcon(RI.RiDeleteBinLine, size: 18),
-                onPressed: () => _confirmRemoveTrack(track),
-                tooltip: AppLocalizations.of(context)!.removeFromPlaylist,
-                style: IconButton.styleFrom(
-                  foregroundColor: colorScheme.error,
-                ),
+                  // Remove button
+                  if (_isHovered || widget.isPlaying)
+                    IconButton(
+                      icon: const FIcon(RI.RiDeleteBinLine, size: 18),
+                      onPressed: widget.onRemove,
+                      tooltip: AppLocalizations.of(context)!.removeFromPlaylist,
+                      style: IconButton.styleFrom(
+                        foregroundColor: colorScheme.error,
+                      ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -763,7 +1064,7 @@ class _AddMusicDialogState extends State<_AddMusicDialog> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Annulla'),
+                      child: Text(l10n.cancel),
                     ),
                     const SizedBox(width: 12),
                     FilledButton(
@@ -785,7 +1086,7 @@ class _AddMusicDialogState extends State<_AddMusicDialog> {
                         ),
                       ),
                       child: Text(
-                        'Aggiungi (${_selectedTrackIds.length})',
+                        l10n.addWithCount(_selectedTrackIds.length.toString()),
                       ),
                     ),
                   ],

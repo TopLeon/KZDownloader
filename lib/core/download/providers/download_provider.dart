@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:rhttp_plus/rhttp_plus.dart';
 
 import 'package:kzdownloader/models/download_task.dart';
 import 'package:kzdownloader/core/services/db_service.dart';
@@ -21,7 +22,10 @@ import 'package:kzdownloader/core/download/strategies/standard_download_strategy
 import 'package:kzdownloader/core/download/strategies/idm_download_strategy.dart';
 import 'package:kzdownloader/core/download/strategies/ytdlp_strategy.dart';
 import 'package:kzdownloader/core/download/strategies/playlist_strategy.dart';
+import 'package:kzdownloader/core/download/strategies/m3u8_strategy.dart';
 import 'package:kzdownloader/core/download/strategies/download_manager.dart';
+import 'package:kzdownloader/core/download/providers/prefetched_metadata.dart';
+import 'package:kzdownloader/core/utils/m3u8_utils.dart';
 
 part 'download_provider.g.dart';
 
@@ -101,6 +105,59 @@ class ActiveDownloadProgress extends _$ActiveDownloadProgress {
 }
 
 // ===========================================================================
+// Global Download Status (aggregate view for sidebar widget)
+// ===========================================================================
+
+class GlobalDownloadState {
+  final int totalActive;
+  final int totalPaused;
+  final double overallProgress;
+  final bool allPaused;
+
+  const GlobalDownloadState({
+    this.totalActive = 0,
+    this.totalPaused = 0,
+    this.overallProgress = 0.0,
+    this.allPaused = false,
+  });
+
+  bool get hasActiveOrPaused => totalActive > 0 || totalPaused > 0;
+}
+
+@riverpod
+GlobalDownloadState globalDownloadStatus(Ref ref) {
+  final downloadList = ref.watch(downloadListProvider).asData?.value ?? [];
+  final progressMap = ref.watch(activeDownloadProgressProvider);
+
+  final running = downloadList
+      .where((t) =>
+          t.downloadStatus == WorkStatus.running && t.playlistParentId == null)
+      .toList();
+  final paused = downloadList
+      .where((t) =>
+          t.downloadStatus == WorkStatus.paused && t.playlistParentId == null)
+      .toList();
+
+  double overallProgress = 0;
+  if (running.isNotEmpty) {
+    double sum = 0;
+    for (final t in running) {
+      final live = progressMap[t.id];
+      final p = live?['progress'] as double? ?? t.progress;
+      sum += p;
+    }
+    overallProgress = sum / running.length;
+  }
+
+  return GlobalDownloadState(
+    totalActive: running.length,
+    totalPaused: paused.length,
+    overallProgress: overallProgress,
+    allPaused: running.isEmpty && paused.isNotEmpty,
+  );
+}
+
+// ===========================================================================
 // Main Download Provider
 // ===========================================================================
 
@@ -137,6 +194,9 @@ class DownloadList extends _$DownloadList {
     TaskCategory? category,
     String? expectedChecksum,
     String? checksumAlgorithm,
+    int? selectedM3U8VariantIndex,
+    int? parallelDownloads,
+    Set<int>? selectedVideoIndices,
   }) async {
     final db = ref.read(dbServiceProvider);
     final url = rawUrl.trim();
@@ -153,7 +213,8 @@ class DownloadList extends _$DownloadList {
     final existingTask = await db.findTaskByUrl(url);
     if (existingTask != null) {
       return _handleExistingTask(existingTask.id, db, finalCategory, provider,
-          format, quality, summarize, isAudio, onlySummary, summaryType);
+          format, quality, summarize, isAudio, onlySummary, summaryType,
+          selectedM3U8VariantIndex: selectedM3U8VariantIndex);
     }
 
     final task = DownloadTask()
@@ -163,8 +224,10 @@ class DownloadList extends _$DownloadList {
       ..progress = 0
       ..summaryType = summaryType
       ..createdAt = DateTime.now()
-      ..isPlaylistContainer =
-          (category == TaskCategory.playlist || UrlUtils.isYouTubePlaylist(url))
+      // M3U8 containers get isPlaylistContainer = true inside M3U8Strategy;
+      // we only pre-set the flag for known playlist URLs (YT playlists).
+      ..isPlaylistContainer = (category == TaskCategory.playlist ||
+          UrlUtils.isYouTubePlaylist(url))
       ..downloadStatus = onlySummary ? WorkStatus.none : WorkStatus.pending
       ..summaryStatus =
           (summarize || onlySummary) ? WorkStatus.pending : WorkStatus.none;
@@ -194,7 +257,10 @@ class DownloadList extends _$DownloadList {
           format: format,
           quality: quality,
           isAudio: isAudio,
-          summarize: summarize);
+          summarize: summarize,
+          selectedM3U8VariantIndex: selectedM3U8VariantIndex,
+          parallelDownloads: parallelDownloads,
+          selectedVideoIndices: selectedVideoIndices);
     }
 
     return (await db.getTask(task.id))!;
@@ -207,6 +273,22 @@ class DownloadList extends _$DownloadList {
     _manager.onCancel(id);
 
     final db = ref.read(dbServiceProvider);
+
+    // If it's a playlist container, cascade pause to children
+    final task = await db.getTask(id);
+    if (task != null && task.isPlaylistContainer) {
+      final children =
+          (await db.getAllTasks()).where((t) => t.playlistParentId == id);
+      for (var child in children) {
+        if (child.downloadStatus == WorkStatus.running ||
+            child.downloadStatus == WorkStatus.pending) {
+          await db.updateTask(child.id, (t) {
+            t.downloadStatus = WorkStatus.paused;
+          });
+        }
+      }
+    }
+
     await db.updateTask(id, (t) {
       if (t.downloadStatus == WorkStatus.running ||
           t.downloadStatus == WorkStatus.pending) {
@@ -312,7 +394,8 @@ class DownloadList extends _$DownloadList {
       bool summarize,
       bool isAudio,
       bool onlySummary,
-      String summaryType) async {
+      String summaryType,
+      {int? selectedM3U8VariantIndex}) async {
     final task = await db.getTask(taskId);
     if (task == null) return null;
 
@@ -358,7 +441,8 @@ class DownloadList extends _$DownloadList {
           format: format,
           quality: quality,
           isAudio: isAudio,
-          summarize: summarize);
+          summarize: summarize,
+          selectedM3U8VariantIndex: selectedM3U8VariantIndex);
     }
 
     return db.getTask(taskId);
@@ -372,6 +456,9 @@ class DownloadList extends _$DownloadList {
     String? quality,
     bool isAudio = false,
     bool summarize = false,
+    int? selectedM3U8VariantIndex,
+    int? parallelDownloads,
+    Set<int>? selectedVideoIndices,
   }) async {
     final db = ref.read(dbServiceProvider);
 
@@ -405,6 +492,9 @@ class DownloadList extends _$DownloadList {
         quality: quality,
         isAudio: isAudio,
         summarize: summarize,
+        selectedM3U8VariantIndex: selectedM3U8VariantIndex,
+        parallelDownloads: parallelDownloads,
+        selectedVideoIndices: selectedVideoIndices,
       );
     });
   }
@@ -416,6 +506,9 @@ class DownloadList extends _$DownloadList {
     String? quality,
     bool isAudio = false,
     bool summarize = false,
+    int? selectedM3U8VariantIndex,
+    int? parallelDownloads,
+    Set<int>? selectedVideoIndices,
   }) async {
     final db = ref.read(dbServiceProvider);
 
@@ -435,60 +528,84 @@ class DownloadList extends _$DownloadList {
 
     DownloadStrategy strategy;
 
-    if (task.isPlaylistContainer || UrlUtils.isYouTubePlaylist(task.url)) {
+    // Check M3U8 by extension first
+    if (UrlUtils.isM3U8Playlist(task.url)) {
+      strategy = M3U8Strategy(taskId, db, ref,
+          selectedVariantIndex: selectedM3U8VariantIndex);
+    } else if (task.isPlaylistContainer ||
+        UrlUtils.isYouTubePlaylist(task.url)) {
       final ytDlp = YtDlpService();
-      strategy = PlaylistStrategy(taskId, db, ref, ytDlp);
+      strategy = PlaylistStrategy(
+        taskId,
+        db,
+        ref,
+        ytDlp,
+        overrideParallelDownloads: parallelDownloads,
+        selectedVideoIndices: selectedVideoIndices ?? {},
+      );
     } else if (UrlUtils.detectProvider(task.url) == 'yt-dlp' ||
         task.provider == 'yt-dlp') {
       final ytDlp = YtDlpService();
       strategy = YtDlpStrategy(taskId, db, ref, ytDlp);
     } else {
       final meta = await _performHeadRequest(task.url);
-      if (meta != null) {
+
+      // Check Content-Type for M3U8 (catches URLs without .m3u8 extension)
+      if (meta != null && UrlUtils.isM3U8ContentType(meta.contentType)) {
+        // Mark as playlist container and switch to M3U8 strategy
         await db.updateTask(taskId, (t) {
-          if (meta.size > 0) {
-            t.totalSize = DownloadHelper.formatBytes(meta.size);
-          }
-          if (meta.remoteFileName != null &&
-              (t.title == null || t.title!.isEmpty)) {
-            t.title = FileUtils.sanitizeFilename(meta.remoteFileName!);
-          }
+          t.isPlaylistContainer = true;
+          t.category = TaskCategory.video;
         });
-      }
-
-      final size = meta?.size ?? 0;
-      final acceptRanges = meta?.acceptRanges ?? false;
-
-      // Disk space check for generic downloads with known size
-      if (size > 0) {
-        try {
-          final freeMB = await DiskSpace.getFreeDiskSpace;
-          if (freeMB != null) {
-            final requiredMB =
-                (size / (1024 * 1024)).ceil() + 100; // +100MB safety margin
-            if (freeMB < requiredMB) {
-              throw Exception(
-                  'Insufficient disk space: ${freeMB.toStringAsFixed(0)} MB free, '
-                  '${requiredMB} MB required');
-            }
-          }
-        } catch (e) {
-          if (e.toString().contains('Insufficient disk space')) rethrow;
-          debugPrint('[DownloadProvider] Disk space check skipped: $e');
-        }
-      }
-
-      bool useIdm = (task.provider == 'Pro' ||
-              (task.provider != 'Standard' && size > 100 * 1024 * 1024)) &&
-          size > 0 &&
-          acceptRanges;
-
-      if (useIdm) {
-        strategy = IDMDownloadStrategy(taskId, db, ref,
-            knownSize: size, knownAcceptRanges: acceptRanges);
+        strategy = M3U8Strategy(taskId, db, ref,
+            selectedVariantIndex: selectedM3U8VariantIndex);
       } else {
-        strategy = StandardDownloadStrategy(taskId, db, ref,
-            knownSize: size, knownAcceptRanges: acceptRanges);
+        if (meta != null) {
+          await db.updateTask(taskId, (t) {
+            if (meta.size > 0) {
+              t.totalSize = DownloadHelper.formatBytes(meta.size);
+            }
+            if (meta.remoteFileName != null &&
+                (t.title == null || t.title!.isEmpty)) {
+              t.title = FileUtils.sanitizeFilename(meta.remoteFileName!);
+            }
+          });
+        }
+
+        final size = meta?.size ?? 0;
+        final acceptRanges = meta?.acceptRanges ?? false;
+
+        // Disk space check for generic downloads with known size
+        if (size > 0) {
+          try {
+            final freeMB = await DiskSpace.getFreeDiskSpace;
+            if (freeMB != null) {
+              final requiredMB =
+                  (size / (1024 * 1024)).ceil() + 100; // +100MB safety margin
+              if (freeMB < requiredMB) {
+                throw Exception(
+                    'Insufficient disk space: ${freeMB.toStringAsFixed(0)} MB free, '
+                    '${requiredMB} MB required');
+              }
+            }
+          } catch (e) {
+            if (e.toString().contains('Insufficient disk space')) rethrow;
+            debugPrint('[DownloadProvider] Disk space check skipped: $e');
+          }
+        }
+
+        bool useIdm = (task.provider == 'Pro' ||
+                (task.provider != 'Standard' && size > 100 * 1024 * 1024)) &&
+            size > 0 &&
+            acceptRanges;
+
+        if (useIdm) {
+          strategy = IDMDownloadStrategy(taskId, db, ref,
+              knownSize: size, knownAcceptRanges: acceptRanges);
+        } else {
+          strategy = StandardDownloadStrategy(taskId, db, ref,
+              knownSize: size, knownAcceptRanges: acceptRanges);
+        }
       }
     }
 
@@ -548,8 +665,83 @@ class DownloadList extends _$DownloadList {
   void prefetchMetadata(String url) {
     if (url.trim().isEmpty) return;
     if (UrlUtils.detectProvider(url) == 'yt-dlp') return;
+
+    // Update prefetch status
+    ref.read(prefetchStatusProvider.notifier).setStatus(PrefetchStatus.loading);
+
     if (!_headRequestCache.containsKey(url)) {
-      _performHeadRequest(url);
+      _performHeadRequest(url).then((meta) {
+        if (meta != null) {
+          // Check if it's M3U8 by content type
+          if (UrlUtils.isM3U8ContentType(meta.contentType)) {
+            prefetchM3U8Metadata(url);
+          } else {
+            ref.read(prefetchedMetadataProvider.notifier).set(
+                url,
+                PrefetchedData(
+                  headMeta: meta,
+                  title: meta.remoteFileName,
+                ));
+            ref
+                .read(prefetchStatusProvider.notifier)
+                .setStatus(PrefetchStatus.ready);
+          }
+        } else {
+          ref
+              .read(prefetchStatusProvider.notifier)
+              .setStatus(PrefetchStatus.ready);
+        }
+      });
+    } else {
+      ref.read(prefetchStatusProvider.notifier).setStatus(PrefetchStatus.ready);
+    }
+  }
+
+  void prefetchM3U8Metadata(String url) async {
+    ref.read(prefetchStatusProvider.notifier).setStatus(PrefetchStatus.loading);
+
+    try {
+      const settings = ClientSettings(
+        emulator: Emulation.chrome136,
+        redirectSettings: RedirectSettings.limited(10),
+      );
+
+      final response = await Rhttp.get(
+        url,
+        settings: settings,
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final bodyText = response.body;
+
+        final result = M3U8Utils.parseHLS(bodyText);
+        // If master playlist, extract variant info
+        String? title;
+        try {
+          final uri = Uri.parse(url);
+          final pathSegments = uri.pathSegments;
+          if (pathSegments.isNotEmpty) {
+            title = pathSegments.last.replaceAll(RegExp(r'\.[^.]+$'), '');
+          }
+        } catch (_) {}
+
+        ref.read(prefetchedMetadataProvider.notifier).set(
+            url,
+            PrefetchedData(
+              m3u8Result: result,
+              title: title,
+            ));
+        ref
+            .read(prefetchStatusProvider.notifier)
+            .setStatus(PrefetchStatus.ready);
+      } else {
+        ref
+            .read(prefetchStatusProvider.notifier)
+            .setStatus(PrefetchStatus.error);
+      }
+    } catch (e) {
+      debugPrint('[DownloadProvider] M3U8 prefetch error: $e');
+      ref.read(prefetchStatusProvider.notifier).setStatus(PrefetchStatus.error);
     }
   }
 
@@ -557,22 +749,74 @@ class DownloadList extends _$DownloadList {
   void prefetchVideoMetadata(String url) {
     if (url.trim().isEmpty) return;
     if (UrlUtils.detectProvider(url) != 'yt-dlp') return;
-    if (_ytMetadataCache.containsKey(url)) return;
+    if (_ytMetadataCache.containsKey(url)) {
+      ref.read(prefetchStatusProvider.notifier).setStatus(PrefetchStatus.ready);
+      return;
+    }
+
+    // Update prefetch status
+    ref.read(prefetchStatusProvider.notifier).setStatus(PrefetchStatus.loading);
 
     final ytDlp = YtDlpService();
     try {
-      final future = UrlUtils.isYouTubePlaylist(url)
-          ? ytDlp.getPlaylistMetadata(url)
-          : ytDlp.getMetadata(url);
+      final isPlaylist = UrlUtils.isYouTubePlaylist(url);
+      final future =
+          isPlaylist ? ytDlp.getPlaylistMetadata(url) : ytDlp.getMetadata(url);
 
       _ytMetadataCache[url] = future;
 
-      future.catchError((e) {
+      future.then((metadata) {
+        // Extract formats list
+        final formats = <Map<String, dynamic>>[];
+        if (metadata['formats'] != null && metadata['formats'] is List) {
+          for (final f in metadata['formats']) {
+            if (f is Map<String, dynamic>) formats.add(f);
+          }
+        }
+
+        // Extract playlist videos
+        List<Map<String, dynamic>>? playlistVideos;
+        int? videoCount;
+        if (isPlaylist) {
+          videoCount = metadata['videoCount'] as int?;
+          final rawList = metadata['videos'] ?? metadata['entries'];
+          if (rawList is List) {
+            playlistVideos = <Map<String, dynamic>>[];
+            for (final entry in rawList) {
+              if (entry is Map<String, dynamic>) playlistVideos.add(entry);
+            }
+            videoCount ??= playlistVideos.length;
+          }
+        }
+
+        final prefetchedData = PrefetchedData(
+          formats: formats,
+          title: metadata['title'],
+          thumbnail: metadata['thumbnail'],
+          channel: metadata['channel'] ?? metadata['uploader'],
+          duration: metadata['duration'] is num
+              ? (metadata['duration'] as num).toInt()
+              : null,
+          isPlaylist: isPlaylist,
+          videoCount: videoCount,
+          playlistVideos: playlistVideos,
+        );
+
+        ref.read(prefetchedMetadataProvider.notifier).set(url, prefetchedData);
+        ref
+            .read(prefetchStatusProvider.notifier)
+            .setStatus(PrefetchStatus.ready);
+      }).catchError((e) {
         debugPrint('[DownloadProvider] Prefetch error for $url: $e');
         _ytMetadataCache.remove(url);
-        return <String, dynamic>{};
+        ref
+            .read(prefetchStatusProvider.notifier)
+            .setStatus(PrefetchStatus.error);
+        return null;
       });
-    } catch (_) {}
+    } catch (_) {
+      ref.read(prefetchStatusProvider.notifier).setStatus(PrefetchStatus.error);
+    }
   }
 
   // Fetches and persists yt-dlp metadata for a task.
@@ -655,7 +899,11 @@ class DownloadList extends _$DownloadList {
           } catch (_) {}
         }
         return UrlMetadata(
-            size: size, acceptRanges: acceptRanges, remoteFileName: fileName);
+          size: size,
+          acceptRanges: acceptRanges,
+          remoteFileName: fileName,
+          contentType: headRes['content-type'],
+        );
       } catch (_) {
         return null;
       }
@@ -684,5 +932,44 @@ class DownloadList extends _$DownloadList {
       {String? format, String? quality, bool isAudio = false}) async {
     _startDownloadStrategy(id,
         format: format, quality: quality, isAudio: isAudio);
+  }
+
+  // =========================================================================
+  // Global Download Control
+  // =========================================================================
+
+  /// Pauses all running tasks.
+  Future<void> pauseAllTasks() async {
+    final db = ref.read(dbServiceProvider);
+    final tasks = await db.getAllTasks();
+    for (final task in tasks) {
+      if (task.downloadStatus == WorkStatus.running) {
+        await pauseTask(task.id);
+      }
+    }
+  }
+
+  /// Resumes all paused tasks.
+  Future<void> resumeAllTasks() async {
+    final db = ref.read(dbServiceProvider);
+    final tasks = await db.getAllTasks();
+    for (final task in tasks) {
+      if (task.downloadStatus == WorkStatus.paused &&
+          task.playlistParentId == null) {
+        await resumeTask(task.id);
+      }
+    }
+  }
+
+  /// Cancels all running/paused/pending tasks.
+  Future<void> cancelAllTasks() async {
+    final db = ref.read(dbServiceProvider);
+    final tasks = await db.getAllTasks();
+    for (final task in tasks) {
+      if (!task.downloadStatus.isFinished ||
+          task.downloadStatus == WorkStatus.running) {
+        await cancelTask(task.id);
+      }
+    }
   }
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:animated_custom_dropdown/custom_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:kzdownloader/core/download/providers/download_provider.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
@@ -29,6 +30,10 @@ class ContentListScreen extends ConsumerStatefulWidget {
   final VoidCallback? onExpandSummary;
   final VoidCallback? onChatPressed;
 
+  /// Propagato al CategoryHeader: se fornito, il pulsante "Add URL"
+  /// chiama questo invece di mostrare il dialog.
+  final VoidCallback? onAddUrl;
+
   const ContentListScreen({
     super.key,
     required this.category,
@@ -40,6 +45,7 @@ class ContentListScreen extends ConsumerStatefulWidget {
     required this.onTaskSelected,
     this.onExpandSummary,
     this.onChatPressed,
+    this.onAddUrl,
   });
 
   @override
@@ -89,6 +95,7 @@ class _ContentListScreenState extends ConsumerState<ContentListScreen> {
                       category: widget.category ?? TaskCategory.generic,
                       onSearchChanged: widget.onSearchChanged,
                       onTaskAdded: widget.onTaskSelected,
+                      onAddUrl: widget.onAddUrl,
                     ),
                     Expanded(
                       child: tasks.isEmpty
@@ -119,6 +126,7 @@ class _ContentListScreenState extends ConsumerState<ContentListScreen> {
                 category: widget.category ?? TaskCategory.generic,
                 onSearchChanged: widget.onSearchChanged,
                 onTaskAdded: widget.onTaskSelected,
+                onAddUrl: widget.onAddUrl,
               ),
               Expanded(
                 child: Row(
@@ -215,9 +223,9 @@ class _ContentListScreenState extends ConsumerState<ContentListScreen> {
                           const SizedBox(width: 6),
                           Text(
                             getSortOptionLabel(selectedItem, l10n),
-                            style: TextStyle(
+                            style: GoogleFonts.montserrat(
                               fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                               color: colorScheme.onSurface,
                             ),
                           ),

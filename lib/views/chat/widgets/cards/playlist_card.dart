@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/models/download_task.dart';
 import 'package:kzdownloader/core/download/providers/download_provider.dart';
+import 'package:kzdownloader/core/utils/utils.dart';
 import 'package:kzdownloader/views/chat/widgets/rainbow.dart';
 import 'package:kzdownloader/views/widgets/confirm_dialog.dart';
 import 'package:ultimate_flutter_icons/ficon.dart';
@@ -36,6 +38,24 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
   Future<void> _openFolder() async {
     if (widget.playlist.dirPath != null) {
       await OpenFile.open(widget.playlist.dirPath);
+    }
+  }
+
+  /// True when the container is an HLS/M3U8 playlist (not a YouTube playlist).
+  /// Relies on [DownloadTask.isPlaylistContainer] set by M3U8Strategy at runtime,
+  /// which is reliable regardless of whether the source URL has an .m3u8 extension.
+  bool get _isM3U8 =>
+      widget.playlist.isPlaylistContainer &&
+      !UrlUtils.isYouTubePlaylist(widget.playlist.url);
+
+  /// Parse variant metadata from stepDetailsJson (stored by M3U8Strategy)
+  Map<String, dynamic>? get _variantMeta {
+    final json = widget.playlist.stepDetailsJson;
+    if (json == null || json.isEmpty) return null;
+    try {
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -88,9 +108,6 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
 
     // Determine border color based on status
     Color borderColor = colorScheme.primary.withOpacity(0.15);
-    if (isDownloading) {
-      borderColor = colorScheme.primary.withOpacity(0.5);
-    }
     if (widget.playlist.downloadStatus == WorkStatus.failed) {
       borderColor = colorScheme.error.withOpacity(0.5);
     }
@@ -187,7 +204,7 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
                                 ),
                               ),
                               const SizedBox(width: 16),
-      
+
                               // Playlist info
                               Expanded(
                                 child: Column(
@@ -205,7 +222,7 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-      
+
                                     // Channel
                                     if (widget.playlist.channelName != null)
                                       Text(
@@ -218,30 +235,92 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-      
+
                                     // Video info and status
                                     Row(
                                       children: [
-                                        FIcon(RI.RiPlayListLine,
-                                            size: 12,
-                                            color: colorScheme.onSurfaceVariant),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          l10n.playlist,
-                                          style: TextStyle(
-                                              fontSize: 12,
+                                        if (_isM3U8) ...[
+                                          // M3U8 badge
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: colorScheme.primary
+                                                  .withOpacity(0.15),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'HLS',
+                                              style: GoogleFonts.montserrat(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: colorScheme.primary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          // Resolution from variant metadata
+                                          if (_variantMeta?['resolution'] !=
+                                              null) ...[
+                                            Text(
+                                              _variantMeta!['resolution']
+                                                  as String,
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: colorScheme
+                                                      .onSurfaceVariant),
+                                            ),
+                                            const SizedBox(width: 6),
+                                          ],
+                                          // FPS
+                                          if (_variantMeta?['frameRate'] !=
+                                              null) ...[
+                                            Text(
+                                              '${(_variantMeta!['frameRate'] as num).toStringAsFixed(0)}fps',
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: colorScheme
+                                                      .onSurfaceVariant),
+                                            ),
+                                            const SizedBox(width: 6),
+                                          ],
+                                          // Segment progress
+                                          if (widget.playlist
+                                                      .playlistTotalVideos !=
+                                                  null &&
+                                              widget.playlist
+                                                      .playlistTotalVideos! >
+                                                  0)
+                                            Text(
+                                              '${widget.playlist.playlistCompletedVideos ?? 0}/${widget.playlist.playlistTotalVideos} seg',
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: colorScheme
+                                                      .onSurfaceVariant),
+                                            ),
+                                        ] else ...[
+                                          // YT playlist info (original)
+                                          FIcon(RI.RiPlayListLine,
+                                              size: 12,
                                               color:
                                                   colorScheme.onSurfaceVariant),
-                                        ),
-                                        const SizedBox(
-                                          width: 8,
-                                        ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            l10n.playlist,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: colorScheme
+                                                    .onSurfaceVariant),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
                                       ],
                                     ),
                                     const SizedBox(height: 8),
-      
+
                                     if (isDownloading)
-      
+
                                       // Progress bar
                                       ClipRRect(
                                         borderRadius: BorderRadius.circular(4),
@@ -257,7 +336,7 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
                               ),
                             ],
                           ),
-      
+
                           // Hover action buttons
                           if (_isHovered)
                             Positioned(
@@ -288,17 +367,62 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
                                     children: [
                                       if (widget.playlist.dirPath != null)
                                         IconButton(
-                                          icon: const FIcon(RI.RiFolderOpenLine),
+                                          icon:
+                                              const FIcon(RI.RiFolderOpenLine),
                                           onPressed: _openFolder,
-                                          tooltip: "Apri Cartella",
+                                          tooltip: l10n.openFolderTooltip,
                                           style: IconButton.styleFrom(
                                             shape: CircleBorder(
                                                 side: BorderSide(
                                                     width: 1,
                                                     color: colorScheme.primary
                                                         .withOpacity(0.15))),
-                                            backgroundColor: colorScheme.tertiary,
-                                            foregroundColor: colorScheme.primary,
+                                            backgroundColor:
+                                                colorScheme.tertiary,
+                                            foregroundColor:
+                                                colorScheme.primary,
+                                          ),
+                                        ),
+                                      // Pause / Resume button
+                                      if (isDownloading)
+                                        IconButton(
+                                          icon: const FIcon(RI.RiPauseFill),
+                                          onPressed: () => ref
+                                              .read(
+                                                  downloadListProvider.notifier)
+                                              .pauseTask(widget.playlist.id),
+                                          tooltip: l10n.actionPause,
+                                          style: IconButton.styleFrom(
+                                            shape: CircleBorder(
+                                                side: BorderSide(
+                                                    width: 1,
+                                                    color: colorScheme.primary
+                                                        .withOpacity(0.15))),
+                                            backgroundColor:
+                                                colorScheme.tertiary,
+                                            foregroundColor:
+                                                colorScheme.primary,
+                                          ),
+                                        )
+                                      else if (widget.playlist.downloadStatus ==
+                                          WorkStatus.paused)
+                                        IconButton(
+                                          icon: const FIcon(RI.RiPlayFill),
+                                          onPressed: () => ref
+                                              .read(
+                                                  downloadListProvider.notifier)
+                                              .resumeTask(widget.playlist.id),
+                                          tooltip: l10n.actionResume,
+                                          style: IconButton.styleFrom(
+                                            shape: CircleBorder(
+                                                side: BorderSide(
+                                                    width: 1,
+                                                    color: colorScheme.primary
+                                                        .withOpacity(0.15))),
+                                            backgroundColor:
+                                                colorScheme.tertiary,
+                                            foregroundColor:
+                                                colorScheme.primary,
                                           ),
                                         ),
                                       const SizedBox(width: 6),
@@ -320,8 +444,9 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
                                       IconButton(
                                         icon: FIcon(
                                           RI.RiDeleteBinLine,
-                                          color:
-                                              Theme.of(context).colorScheme.error,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error,
                                         ),
                                         onPressed: _confirmDelete,
                                         tooltip: "Elimina",

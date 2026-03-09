@@ -1,7 +1,6 @@
 ﻿import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kzdownloader/core/providers/quality_provider.dart';
 import 'package:kzdownloader/core/services/llm_service.dart';
 import 'package:kzdownloader/views/chat/providers/video_chat_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +26,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
   String _selectedProvider = 'Auto';
   static const String _aiModelKey = 'ai_selected_model';
 
@@ -35,6 +35,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
 
   bool _showVideoOptions = false;
   bool _isAudio = false;
+  String _selectedQuality = 'best';
+  int? _selectedM3U8VariantIndex;
+  int _parallelDownloads = 3;
+  Set<int> _selectedVideoIndices = {};
 
   String _searchQuery = '';
   SortOption _selectedSortOption = SortOption.recent;
@@ -137,6 +141,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
     windowManager.removeListener(this);
     _controller.removeListener(_onTextChanged);
     _controller.dispose();
+    _inputFocusNode.dispose();
     _mousePosNotifier.dispose();
 
     super.dispose();
@@ -153,14 +158,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
       provider = UrlUtils.detectProvider(url);
     }
 
-    // Get quality from provider
-    final qualitySettings = await ref.read(qualitySettings_Provider.future);
-    final String q = qualitySettings
-        .toDisplayString()
-        .toLowerCase()
-        .replaceAll('best', 'best')
-        .replaceAll('medium', 'medium')
-        .replaceAll('low', 'low');
+    // Use selected quality directly
+    final String q = _selectedQuality;
 
     final newTask = (await ref.read(downloadListProvider.notifier).addTask(
           url,
@@ -172,15 +171,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
           summaryType: 'short',
           expectedChecksum: _expectedChecksum,
           checksumAlgorithm: _checksumAlgorithm,
+          selectedM3U8VariantIndex: _selectedM3U8VariantIndex,
+          parallelDownloads: _parallelDownloads != 3 ? _parallelDownloads : null,
+          selectedVideoIndices:
+              _selectedVideoIndices.isNotEmpty ? _selectedVideoIndices : null,
         ))!;
 
     ref.read(selectedCategoryProvider.notifier).setCategory(newTask.category);
     setState(() {
       _isSummaryMode = false;
-      _isSummaryMode = false;
       _isAudio = false;
+      _selectedQuality = 'best';
+      _selectedM3U8VariantIndex = null;
       _expectedChecksum = '';
       _checksumAlgorithm = 'MD5';
+      _parallelDownloads = 3;
+      _selectedVideoIndices = {};
     });
 
     _controller.clear();
@@ -193,6 +199,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
       } else if (newTask.category == TaskCategory.generic) {
         _lastSelectedGenericId = newTask.id;
       }
+    });
+  }
+
+  /// Naviga alla sezione Home e mette a fuoco il campo di input URL.
+  void _navigateToHomeAndFocus() {
+    ref.read(selectedCategoryProvider.notifier).setCategory(TaskCategory.home);
+    // Aspetta che il widget Home sia montato prima di richiedere il focus
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _inputFocusNode.requestFocus();
     });
   }
 
@@ -428,10 +443,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
 
   Widget _buildBodyContent(TaskCategory? selectedCategory) {
     if (selectedCategory == TaskCategory.settings) {
-      return const SettingsScreen();
+      return SettingsScreen(onAddUrl: _navigateToHomeAndFocus);
     } else if (selectedCategory == TaskCategory.home) {
       return HomeScreen(
         controller: _controller,
+        focusNode: _inputFocusNode,
         selectedProvider: _selectedProvider,
         showVideoOptions: _showVideoOptions,
         isAudio: _isAudio,
@@ -441,6 +457,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
         showInitialAnimation: _showInitialAnimation,
         onSubmit: _handleAction,
         onProviderChanged: (value) => setState(() => _selectedProvider = value),
+        selectedQuality: _selectedQuality,
+        onQualityChanged: (value) => setState(() => _selectedQuality = value),
         onIsAudioChanged: (value) => setState(() => _isAudio = value),
         onSummarizeOnlyChanged: (value) =>
             setState(() => _isSummaryMode = value),
@@ -464,6 +482,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
         checksumAlgorithm: _checksumAlgorithm,
         onChecksumChanged: (val) => setState(() => _expectedChecksum = val),
         onAlgorithmChanged: (val) => setState(() => _checksumAlgorithm = val),
+        onM3U8VariantIndexChanged: (idx) =>
+            setState(() => _selectedM3U8VariantIndex = idx),
+        onParallelDownloadsChanged: (val) =>
+            setState(() => _parallelDownloads = val),
+        onSelectedVideoIndicesChanged: (indices) =>
+            setState(() => _selectedVideoIndices = indices),
       );
     } else if (selectedCategory == TaskCategory.music) {
       return MusicScreen(
@@ -472,6 +496,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
         onSearchChanged: (val) => setState(() => _searchQuery = val),
         onSortChanged: (option) => setState(() => _selectedSortOption = option),
         onTaskSelected: _handleTaskSelected,
+        onAddUrl: _navigateToHomeAndFocus,
       );
     } else {
       return ContentListScreen(
@@ -482,6 +507,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
         onSearchChanged: (val) => setState(() => _searchQuery = val),
         onSortChanged: (option) => setState(() => _selectedSortOption = option),
         onTaskSelected: _handleTaskSelected,
+        onAddUrl: _navigateToHomeAndFocus,
       );
     }
   }

@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/core/services/settings_service.dart';
 import 'package:kzdownloader/core/download/providers/download_provider.dart';
 import 'package:kzdownloader/core/providers/theme_provider.dart';
-import 'package:kzdownloader/core/providers/quality_provider.dart';
+
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
 import 'package:kzdownloader/core/providers/locale_provider.dart';
 import 'package:kzdownloader/models/download_task.dart';
@@ -574,7 +574,9 @@ class _OllamaModelSelectorState extends ConsumerState<OllamaModelSelector> {
 }
 
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
+  final VoidCallback? onAddUrl;
+
+  const SettingsScreen({super.key, this.onAddUrl});
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -586,6 +588,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   DownloadFormat _audioFormat = DownloadFormat.mp3;
   int _maxConcurrentDownloads = 3;
   int _maxConcurrentGlobalDownloads = 3;
+  String _defaultQuality = 'best';
 
   bool _summaryAnimationsEnabled = true;
   final SettingsService _settingsService = SettingsService();
@@ -605,6 +608,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         await _settingsService.getSummaryAnimationsEnabled();
     final maxConcurrentGlobal =
         await _settingsService.getMaxConcurrentGlobalDownloads();
+    final defaultQuality = await _settingsService.getDefaultQuality();
     if (mounted) {
       setState(() {
         _downloadPath = path;
@@ -613,6 +617,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _maxConcurrentDownloads = maxConcurrent;
         _maxConcurrentGlobalDownloads = maxConcurrentGlobal;
         _summaryAnimationsEnabled = summaryAnimations;
+        _defaultQuality = defaultQuality;
       });
     }
   }
@@ -655,990 +660,725 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final l10n = AppLocalizations.of(context)!;
     final localeAsync = ref.watch(localeProvider);
     final currentLocale = localeAsync.asData?.value;
-    final qualitySettingsAsync = ref.watch(qualitySettings_Provider);
 
-    return qualitySettingsAsync.when(
-      data: (qualitySettings) => Column(children: [
-        const CategoryHeader(category: TaskCategory.settings),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(32, 24, 32, 48),
-            children: [
-              SectionHeader(title: l10n.settingsGeneral, icon: Icons.tune),
-              const SizedBox(height: 8),
+    return Column(children: [
+      CategoryHeader(
+        category: TaskCategory.settings,
+        onAddUrl: widget.onAddUrl,
+      ),
+      Expanded(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(32, 24, 32, 48),
+          children: [
+            SectionHeader(title: l10n.settingsGeneral, icon: Icons.tune),
+            const SizedBox(height: 8),
 
-              // Download Path
-              _StyledLabel(l10n.downloadPath),
-              Container(
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: colorScheme.outlineVariant.withOpacity(0.5)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        child: Text(
-                          _downloadPath ?? l10n.defaultDownloadPath,
-                          style: TextStyle(
-                              color: colorScheme.onSurface, fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+            // Download Path
+            _StyledLabel(l10n.downloadPath),
+            Container(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: colorScheme.outlineVariant.withOpacity(0.5)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      child: Text(
+                        _downloadPath ?? l10n.defaultDownloadPath,
+                        style: TextStyle(
+                            color: colorScheme.onSurface, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    InkWell(
-                      onTap: _pickDownloadPath,
-                      borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(8),
-                          bottomRight: Radius.circular(8)),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border(
-                              left: BorderSide(
-                                  color: colorScheme.outlineVariant
-                                      .withOpacity(0.3))),
-                        ),
-                        child: FIcon(
-                          RI.RiFolderOpenLine,
-                          color: colorScheme.primary,
-                          size: 20,
-                        ),
+                  ),
+                  InkWell(
+                    onTap: _pickDownloadPath,
+                    borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(8),
+                        bottomRight: Radius.circular(8)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        border: Border(
+                            left: BorderSide(
+                                color: colorScheme.outlineVariant
+                                    .withOpacity(0.3))),
                       ),
-                    )
-                  ],
+                      child: FIcon(
+                        RI.RiFolderOpenLine,
+                        color: colorScheme.primary,
+                        size: 20,
+                      ),
+                    ),
+                  )
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.downloadPathDescription,
+              style:
+                  TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Format & Quality Row
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _StyledLabel(l10n.defaultFormat),
+                      CustomDropdown<DownloadFormat>(
+                        decoration: CustomDropdownDecoration(
+                            closedFillColor: colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            expandedFillColor: colorScheme.surface,
+                            closedBorder: Border.all(
+                                color: colorScheme.outlineVariant
+                                    .withOpacity(0.5)),
+                            expandedBorder: Border.all(
+                                color: colorScheme.primary.withOpacity(0.15)),
+                            closedBorderRadius: BorderRadius.circular(8),
+                            expandedBorderRadius: BorderRadius.circular(8),
+                            listItemDecoration: ListItemDecoration(
+                              splashColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                              highlightColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                            )),
+                        items: DownloadFormat.values
+                            .where((x) =>
+                                x != DownloadFormat.mp3 &&
+                                x != DownloadFormat.m4a &&
+                                x != DownloadFormat.ogg)
+                            .toList(),
+                        initialItem: _format,
+                        headerBuilder: (context, selectedItem, c) {
+                          return Row(
+                            children: [
+                              const FIcon(RI.RiVideoFill, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                selectedItem.name.toUpperCase(),
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        listItemBuilder:
+                            (context, item, isSelected, onItemSelect) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 0),
+                            child: Text(
+                              item.name.toUpperCase(),
+                              style: GoogleFonts.montserrat(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isSelected ? colorScheme.primary : null,
+                              ),
+                            ),
+                          );
+                        },
+                        onChanged: (newValue) {
+                          if (newValue != null) {
+                            setState(() => _format = newValue);
+                            _settingsService.setDefaultFormat(newValue);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                l10n.downloadPathDescription,
-                style: TextStyle(
-                    fontSize: 13, color: colorScheme.onSurfaceVariant),
-              ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _StyledLabel(l10n.defaultAudioFormat),
+                      CustomDropdown<DownloadFormat>(
+                        decoration: CustomDropdownDecoration(
+                            closedFillColor: colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            expandedFillColor: colorScheme.surface,
+                            closedBorder: Border.all(
+                                color: colorScheme.outlineVariant
+                                    .withOpacity(0.5)),
+                            expandedBorder: Border.all(
+                                color: colorScheme.primary.withOpacity(0.15)),
+                            closedBorderRadius: BorderRadius.circular(8),
+                            expandedBorderRadius: BorderRadius.circular(8),
+                            listItemDecoration: ListItemDecoration(
+                              splashColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                              highlightColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                            )),
+                        items: DownloadFormat.values
+                            .where((x) =>
+                                x == DownloadFormat.mp3 ||
+                                x == DownloadFormat.m4a ||
+                                x == DownloadFormat.ogg)
+                            .toList(),
+                        initialItem: _audioFormat,
+                        headerBuilder: (context, selectedItem, c) {
+                          return Row(
+                            children: [
+                              const FIcon(RI.RiMusicFill, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                selectedItem.name.toUpperCase(),
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        listItemBuilder:
+                            (context, item, isSelected, onItemSelect) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 0),
+                            child: Text(
+                              item.name.toUpperCase(),
+                              style: GoogleFonts.montserrat(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isSelected ? colorScheme.primary : null,
+                              ),
+                            ),
+                          );
+                        },
+                        onChanged: (newValue) {
+                          if (newValue != null) {
+                            setState(() => _audioFormat = newValue);
+                            _settingsService.setDefaultAudioFormat(newValue);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _StyledLabel(l10n.defaultQuality),
+                      CustomDropdown<String>(
+                        decoration: CustomDropdownDecoration(
+                            closedFillColor: colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            expandedFillColor: colorScheme.surface,
+                            closedBorder: Border.all(
+                                color: colorScheme.outlineVariant
+                                    .withOpacity(0.5)),
+                            expandedBorder: Border.all(
+                                color: colorScheme.primary.withOpacity(0.15)),
+                            closedBorderRadius: BorderRadius.circular(8),
+                            expandedBorderRadius: BorderRadius.circular(8),
+                            listItemDecoration: ListItemDecoration(
+                              splashColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                              highlightColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                            )),
+                        items: const [
+                          'best',
+                          '1080p',
+                          '720p',
+                          '480p',
+                        ],
+                        initialItem: _defaultQuality,
+                        headerBuilder: (context, selectedItem, c) {
+                          String displayText;
+                          switch (selectedItem) {
+                            case 'best':
+                              displayText = l10n.qualityBest;
+                              break;
+                            case '1080p':
+                              displayText = '1080p';
+                              break;
+                            case '720p':
+                              displayText = '720p';
+                              break;
+                            case '480p':
+                              displayText = '480p';
+                              break;
+                            default:
+                              displayText = selectedItem;
+                          }
+                          return Row(
+                            children: [
+                              const FIcon(RI.RiHdFill, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                displayText,
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        listItemBuilder:
+                            (context, item, isSelected, onItemSelect) {
+                          String displayText;
+                          switch (item) {
+                            case 'best':
+                              displayText = l10n.qualityBest;
+                              break;
+                            default:
+                              displayText = item;
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 0),
+                            child: Text(
+                              displayText,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isSelected ? colorScheme.primary : null,
+                              ),
+                            ),
+                          );
+                        },
+                        onChanged: (newValue) {
+                          if (newValue != null) {
+                            setState(() => _defaultQuality = newValue);
+                            _settingsService.setDefaultQuality(newValue);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
 
-              const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-              // Quality Mode Toggle
-              Row(
+            // Settings Row
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _StyledLabel(l10n.concurrentDownloadsPlaylist),
+                      CustomDropdown<int>(
+                        decoration: CustomDropdownDecoration(
+                            closedFillColor: colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            expandedFillColor: colorScheme.surface,
+                            closedBorder: Border.all(
+                                color: colorScheme.outlineVariant
+                                    .withOpacity(0.5)),
+                            expandedBorder: Border.all(
+                                color: colorScheme.primary.withOpacity(0.15)),
+                            closedBorderRadius: BorderRadius.circular(8),
+                            expandedBorderRadius: BorderRadius.circular(8),
+                            listItemDecoration: ListItemDecoration(
+                              splashColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                              highlightColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                            )),
+                        items: const [1, 2, 3, 4, 5, 6, 8, 10],
+                        initialItem: _maxConcurrentDownloads,
+                        headerBuilder: (context, selectedItem, c) {
+                          return Row(
+                            children: [
+                              const FIcon(RI.RiDownloadFill, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                '$selectedItem',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        listItemBuilder:
+                            (context, item, isSelected, onItemSelect) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 0),
+                            child: Text(
+                              '$item',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isSelected ? colorScheme.primary : null,
+                              ),
+                            ),
+                          );
+                        },
+                        onChanged: (newValue) {
+                          if (newValue != null) {
+                            setState(() => _maxConcurrentDownloads = newValue);
+                            _settingsService
+                                .setMaxConcurrentDownloads(newValue);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _StyledLabel(l10n.concurrentDownloadsGlobal),
+                      CustomDropdown<int>(
+                        decoration: CustomDropdownDecoration(
+                            closedFillColor: colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            expandedFillColor: colorScheme.surface,
+                            closedBorder: Border.all(
+                                color: colorScheme.outlineVariant
+                                    .withOpacity(0.5)),
+                            expandedBorder: Border.all(
+                                color: colorScheme.primary.withOpacity(0.15)),
+                            closedBorderRadius: BorderRadius.circular(8),
+                            expandedBorderRadius: BorderRadius.circular(8),
+                            listItemDecoration: ListItemDecoration(
+                              splashColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                              highlightColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                            )),
+                        items: const [1, 2, 3, 4, 5, 6, 8, 10],
+                        initialItem: _maxConcurrentGlobalDownloads,
+                        headerBuilder: (context, selectedItem, c) {
+                          return Row(
+                            children: [
+                              const FIcon(RI.RiDownloadFill, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                '$selectedItem',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        listItemBuilder:
+                            (context, item, isSelected, onItemSelect) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 0),
+                            child: Text(
+                              '$item',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isSelected ? colorScheme.primary : null,
+                              ),
+                            ),
+                          );
+                        },
+                        onChanged: (newValue) {
+                          if (newValue != null) {
+                            setState(
+                                () => _maxConcurrentGlobalDownloads = newValue);
+                            _settingsService
+                                .setMaxConcurrentGlobalDownloads(newValue);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _StyledLabel(l10n.language),
+                      CustomDropdown<String>(
+                        decoration: CustomDropdownDecoration(
+                            closedFillColor: colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                            expandedFillColor: colorScheme.surface,
+                            closedBorder: Border.all(
+                                color: colorScheme.outlineVariant
+                                    .withOpacity(0.5)),
+                            expandedBorder: Border.all(
+                                color: colorScheme.primary.withOpacity(0.15)),
+                            closedBorderRadius: BorderRadius.circular(8),
+                            expandedBorderRadius: BorderRadius.circular(8),
+                            listItemDecoration: ListItemDecoration(
+                              splashColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                              highlightColor:
+                                  colorScheme.primary.withOpacity(0.05),
+                            )),
+                        items: const ['English', 'Italiano'],
+                        initialItem: currentLocale?.languageCode == 'it'
+                            ? 'Italiano'
+                            : 'English',
+                        headerBuilder: (context, selectedItem, c) {
+                          return Row(
+                            children: [
+                              const FIcon(RI.RiTranslate, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                selectedItem,
+                                style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          );
+                        },
+                        listItemBuilder:
+                            (context, item, isSelected, onItemSelect) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 0),
+                            child: Text(
+                              item,
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w400,
+                                color: isSelected ? colorScheme.primary : null,
+                              ),
+                            ),
+                          );
+                        },
+                        onChanged: (val) {
+                          if (val != null) {
+                            final locale = val == 'Italiano' ? 'it' : 'en';
+                            ref
+                                .read(localeProvider.notifier)
+                                .setLocale(Locale(locale));
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 48),
+
+            SectionHeader(title: l10n.settingsAI, icon: Icons.psychology),
+            const SizedBox(height: 8),
+            const OllamaModelSelector(),
+
+            const SizedBox(height: 48),
+
+            SectionHeader(title: l10n.settingsAppearance, icon: Icons.palette),
+            const SizedBox(height: 8),
+
+            // _StyledLabel(l10n.theme),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: colorScheme.outlineVariant.withOpacity(0.5))),
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        l10n.qualityMode,
-                        style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w500, fontSize: 13),
-                      ),
-                      Text(
-                        qualitySettings.mode == QualityMode.simple
-                            ? l10n.qualityModeSimple
-                            : l10n.qualityModeExpert,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
+                      Text(l10n.selectThemeTitle,
+                          style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w500, fontSize: 13)),
+                      Text(l10n.settingsAppearanceSubtitle,
+                          style: GoogleFonts.montserrat(
+                              fontSize: 13,
+                              color: colorScheme.onSurfaceVariant)),
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color:
-                          colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(20),
+                      color: colorScheme.surface,
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                           color: colorScheme.outlineVariant.withOpacity(0.5)),
                     ),
+                    padding: const EdgeInsets.all(4),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        InkWell(
-                          onTap: () async {
-                            final currentQuality = qualitySettings.quality;
-                            // Convert expert qualities to simple equivalents
-                            DownloadQuality newQuality;
-                            if (currentQuality == DownloadQuality.p1440 ||
-                                currentQuality == DownloadQuality.p2160) {
-                              newQuality = DownloadQuality.best;
-                            } else if (currentQuality ==
-                                DownloadQuality.p1080) {
-                              newQuality = DownloadQuality.high;
-                            } else if (currentQuality == DownloadQuality.p720) {
-                              newQuality = DownloadQuality.medium;
-                            } else if (currentQuality == DownloadQuality.p480) {
-                              newQuality = DownloadQuality.low;
-                            } else {
-                              newQuality = currentQuality;
-                            }
-                            await ref
-                                .read(qualitySettings_Provider.notifier)
-                                .setQualityAndMode(
-                                    newQuality, QualityMode.simple);
-                          },
-                          borderRadius: BorderRadius.circular(16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: qualitySettings.mode == QualityMode.simple
-                                  ? colorScheme.primary
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              l10n.qualityModeSimple,
-                              style: GoogleFonts.montserrat(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color:
-                                    qualitySettings.mode == QualityMode.simple
-                                        ? colorScheme.onPrimary
-                                        : colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
+                        _ThemeButton(
+                          icon: RI.RiMagicLine,
+                          mode: ThemeMode.system,
+                          current: ref.watch(themeProvider).asData?.value ??
+                              ThemeMode.system,
+                          onTap: (m) =>
+                              ref.read(themeProvider.notifier).setThemeMode(m),
                         ),
-                        InkWell(
-                          onTap: () async {
-                            final currentQuality = qualitySettings.quality;
-                            // Convert simple qualities to expert equivalents
-                            DownloadQuality newQuality;
-                            if (currentQuality == DownloadQuality.best) {
-                              newQuality = DownloadQuality.p2160;
-                            } else if (currentQuality == DownloadQuality.high) {
-                              newQuality = DownloadQuality.p1080;
-                            } else if (currentQuality ==
-                                DownloadQuality.medium) {
-                              newQuality = DownloadQuality.p720;
-                            } else if (currentQuality == DownloadQuality.low) {
-                              newQuality = DownloadQuality.p480;
-                            } else {
-                              newQuality = currentQuality;
-                            }
-                            await ref
-                                .read(qualitySettings_Provider.notifier)
-                                .setQualityAndMode(
-                                    newQuality, QualityMode.expert);
-                          },
-                          borderRadius: BorderRadius.circular(16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: qualitySettings.mode == QualityMode.expert
-                                  ? colorScheme.primary
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              l10n.qualityModeExpert,
-                              style: GoogleFonts.montserrat(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color:
-                                    qualitySettings.mode == QualityMode.expert
-                                        ? colorScheme.onPrimary
-                                        : colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
+                        const SizedBox(width: 4),
+                        _ThemeButton(
+                          icon: RI.RiSunLine,
+                          mode: ThemeMode.light,
+                          current: ref.watch(themeProvider).asData?.value ??
+                              ThemeMode.system,
+                          onTap: (m) =>
+                              ref.read(themeProvider.notifier).setThemeMode(m),
+                        ),
+                        const SizedBox(width: 4),
+                        _ThemeButton(
+                          icon: RI.RiMoonLine,
+                          mode: ThemeMode.dark,
+                          current: ref.watch(themeProvider).asData?.value ??
+                              ThemeMode.system,
+                          onTap: (m) =>
+                              ref.read(themeProvider.notifier).setThemeMode(m),
                         ),
                       ],
                     ),
-                  ),
+                  )
                 ],
               ),
+            ),
 
-              const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-              // Format & Quality Row
-              Row(
+            // Summary Animations Toggle
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: colorScheme.outlineVariant.withOpacity(0.5))),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _StyledLabel(l10n.defaultFormat),
-                        CustomDropdown<DownloadFormat>(
-                          decoration: CustomDropdownDecoration(
-                              closedFillColor: colorScheme
-                                  .surfaceContainerHighest
-                                  .withOpacity(0.3),
-                              expandedFillColor: colorScheme.surface,
-                              closedBorder: Border.all(
-                                  color: colorScheme.outlineVariant
-                                      .withOpacity(0.5)),
-                              expandedBorder: Border.all(
-                                  color: colorScheme.primary.withOpacity(0.15)),
-                              closedBorderRadius: BorderRadius.circular(8),
-                              expandedBorderRadius: BorderRadius.circular(8),
-                              listItemDecoration: ListItemDecoration(
-                                splashColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                                highlightColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                              )),
-                          items: DownloadFormat.values
-                              .where((x) =>
-                                  x != DownloadFormat.mp3 &&
-                                  x != DownloadFormat.m4a &&
-                                  x != DownloadFormat.ogg)
-                              .toList(),
-                          initialItem: _format,
-                          headerBuilder: (context, selectedItem, c) {
-                            return Row(
-                              children: [
-                                const FIcon(RI.RiVideoFill, size: 16),
-                                const SizedBox(width: 8),
-                                Text(
-                                  selectedItem.name.toUpperCase(),
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                          listItemBuilder:
-                              (context, item, isSelected, onItemSelect) {
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 0),
-                              child: Text(
-                                item.name.toUpperCase(),
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color:
-                                      isSelected ? colorScheme.primary : null,
-                                ),
-                              ),
-                            );
-                          },
-                          onChanged: (newValue) {
-                            if (newValue != null) {
-                              setState(() => _format = newValue);
-                              _settingsService.setDefaultFormat(newValue);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _StyledLabel(l10n.defaultAudioFormat),
-                        CustomDropdown<DownloadFormat>(
-                          decoration: CustomDropdownDecoration(
-                              closedFillColor: colorScheme
-                                  .surfaceContainerHighest
-                                  .withOpacity(0.3),
-                              expandedFillColor: colorScheme.surface,
-                              closedBorder: Border.all(
-                                  color: colorScheme.outlineVariant
-                                      .withOpacity(0.5)),
-                              expandedBorder: Border.all(
-                                  color: colorScheme.primary.withOpacity(0.15)),
-                              closedBorderRadius: BorderRadius.circular(8),
-                              expandedBorderRadius: BorderRadius.circular(8),
-                              listItemDecoration: ListItemDecoration(
-                                splashColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                                highlightColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                              )),
-                          items: DownloadFormat.values
-                              .where((x) =>
-                                  x == DownloadFormat.mp3 ||
-                                  x == DownloadFormat.m4a ||
-                                  x == DownloadFormat.ogg)
-                              .toList(),
-                          initialItem: _audioFormat,
-                          headerBuilder: (context, selectedItem, c) {
-                            return Row(
-                              children: [
-                                const FIcon(RI.RiMusicFill, size: 16),
-                                const SizedBox(width: 8),
-                                Text(
-                                  selectedItem.name.toUpperCase(),
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                          listItemBuilder:
-                              (context, item, isSelected, onItemSelect) {
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 0),
-                              child: Text(
-                                item.name.toUpperCase(),
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color:
-                                      isSelected ? colorScheme.primary : null,
-                                ),
-                              ),
-                            );
-                          },
-                          onChanged: (newValue) {
-                            if (newValue != null) {
-                              setState(() => _audioFormat = newValue);
-                              _settingsService.setDefaultAudioFormat(newValue);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _StyledLabel(l10n.defaultQuality),
-                        if (qualitySettings.mode == QualityMode.simple)
-                          CustomDropdown<DownloadQuality>(
-                            decoration: CustomDropdownDecoration(
-                                closedFillColor: colorScheme
-                                    .surfaceContainerHighest
-                                    .withOpacity(0.3),
-                                expandedFillColor: colorScheme.surface,
-                                closedBorder: Border.all(
-                                    color: colorScheme.outlineVariant
-                                        .withOpacity(0.5)),
-                                expandedBorder: Border.all(
-                                    color:
-                                        colorScheme.primary.withOpacity(0.15)),
-                                closedBorderRadius: BorderRadius.circular(8),
-                                expandedBorderRadius: BorderRadius.circular(8),
-                                listItemDecoration: ListItemDecoration(
-                                  splashColor:
-                                      colorScheme.primary.withOpacity(0.05),
-                                  highlightColor:
-                                      colorScheme.primary.withOpacity(0.05),
-                                )),
-                            items: const [
-                              DownloadQuality.best,
-                              DownloadQuality.high,
-                              DownloadQuality.medium,
-                              DownloadQuality.low
-                            ],
-                            initialItem: qualitySettings.quality ==
-                                        DownloadQuality.p2160 ||
-                                    qualitySettings.quality ==
-                                        DownloadQuality.p1440 ||
-                                    qualitySettings.quality ==
-                                        DownloadQuality.p1080 ||
-                                    qualitySettings.quality ==
-                                        DownloadQuality.p720 ||
-                                    qualitySettings.quality ==
-                                        DownloadQuality.p480
-                                ? (qualitySettings.quality ==
-                                            DownloadQuality.p2160 ||
-                                        qualitySettings.quality ==
-                                            DownloadQuality.p1440
-                                    ? DownloadQuality.best
-                                    : qualitySettings.quality ==
-                                            DownloadQuality.p1080
-                                        ? DownloadQuality.high
-                                        : qualitySettings.quality ==
-                                                DownloadQuality.p720
-                                            ? DownloadQuality.medium
-                                            : DownloadQuality.low)
-                                : qualitySettings.quality,
-                            headerBuilder: (context, selectedItem, c) {
-                              String displayText;
-                              if (selectedItem == DownloadQuality.best) {
-                                displayText = l10n.qualityBest;
-                              } else if (selectedItem == DownloadQuality.high) {
-                                displayText = l10n.qualityHigh;
-                              } else if (selectedItem ==
-                                  DownloadQuality.medium) {
-                                displayText = l10n.qualityMedium;
-                              } else {
-                                displayText = l10n.qualityLow;
-                              }
-                              return Row(
-                                children: [
-                                  const FIcon(RI.RiHdFill, size: 16),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    displayText,
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                            listItemBuilder:
-                                (context, item, isSelected, onItemSelect) {
-                              String displayText;
-                              if (item == DownloadQuality.best) {
-                                displayText = l10n.qualityBest;
-                              } else if (item == DownloadQuality.high) {
-                                displayText = l10n.qualityHigh;
-                              } else if (item == DownloadQuality.medium) {
-                                displayText = l10n.qualityMedium;
-                              } else {
-                                displayText = l10n.qualityLow;
-                              }
-                              return Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 0),
-                                child: Text(
-                                  displayText,
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color:
-                                        isSelected ? colorScheme.primary : null,
-                                  ),
-                                ),
-                              );
-                            },
-                            onChanged: (newValue) {
-                              if (newValue != null) {
-                                ref
-                                    .read(qualitySettings_Provider.notifier)
-                                    .setQuality(newValue);
-                              }
-                            },
-                          )
-                        else
-                          CustomDropdown<DownloadQuality>(
-                            decoration: CustomDropdownDecoration(
-                                closedFillColor: colorScheme
-                                    .surfaceContainerHighest
-                                    .withOpacity(0.3),
-                                expandedFillColor: colorScheme.surface,
-                                closedBorder: Border.all(
-                                    color: colorScheme.outlineVariant
-                                        .withOpacity(0.5)),
-                                expandedBorder: Border.all(
-                                    color:
-                                        colorScheme.primary.withOpacity(0.15)),
-                                closedBorderRadius: BorderRadius.circular(8),
-                                expandedBorderRadius: BorderRadius.circular(8),
-                                listItemDecoration: ListItemDecoration(
-                                  splashColor:
-                                      colorScheme.primary.withOpacity(0.05),
-                                  highlightColor:
-                                      colorScheme.primary.withOpacity(0.05),
-                                )),
-                            items: const [
-                              DownloadQuality.p2160,
-                              DownloadQuality.p1440,
-                              DownloadQuality.p1080,
-                              DownloadQuality.p720,
-                              DownloadQuality.p480
-                            ],
-                            initialItem:
-                                qualitySettings.quality == DownloadQuality.best
-                                    ? DownloadQuality.p2160
-                                    : qualitySettings.quality ==
-                                            DownloadQuality.high
-                                        ? DownloadQuality.p1080
-                                        : qualitySettings.quality ==
-                                                DownloadQuality.medium
-                                            ? DownloadQuality.p720
-                                            : qualitySettings.quality ==
-                                                    DownloadQuality.low
-                                                ? DownloadQuality.p480
-                                                : qualitySettings.quality,
-                            headerBuilder: (context, selectedItem, c) {
-                              return Row(
-                                children: [
-                                  const FIcon(RI.RiHdFill, size: 16),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    selectedItem.name
-                                        .replaceAll('p', '')
-                                        .toUpperCase(),
-                                    style: GoogleFonts.montserrat(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                            listItemBuilder:
-                                (context, item, isSelected, onItemSelect) {
-                              return Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 0),
-                                child: Text(
-                                  item.name.replaceAll('p', '').toUpperCase(),
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color:
-                                        isSelected ? colorScheme.primary : null,
-                                  ),
-                                ),
-                              );
-                            },
-                            onChanged: (newValue) {
-                              if (newValue != null) {
-                                ref
-                                    .read(qualitySettings_Provider.notifier)
-                                    .setQuality(newValue);
-                              }
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // Settings Row
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _StyledLabel(l10n.concurrentDownloadsPlaylist),
-                        CustomDropdown<int>(
-                          decoration: CustomDropdownDecoration(
-                              closedFillColor: colorScheme
-                                  .surfaceContainerHighest
-                                  .withOpacity(0.3),
-                              expandedFillColor: colorScheme.surface,
-                              closedBorder: Border.all(
-                                  color: colorScheme.outlineVariant
-                                      .withOpacity(0.5)),
-                              expandedBorder: Border.all(
-                                  color: colorScheme.primary.withOpacity(0.15)),
-                              closedBorderRadius: BorderRadius.circular(8),
-                              expandedBorderRadius: BorderRadius.circular(8),
-                              listItemDecoration: ListItemDecoration(
-                                splashColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                                highlightColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                              )),
-                          items: const [1, 2, 3, 4, 5, 6, 8, 10],
-                          initialItem: _maxConcurrentDownloads,
-                          headerBuilder: (context, selectedItem, c) {
-                            return Row(
-                              children: [
-                                const FIcon(RI.RiDownloadFill, size: 16),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '$selectedItem',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                          listItemBuilder:
-                              (context, item, isSelected, onItemSelect) {
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 0),
-                              child: Text(
-                                '$item',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color:
-                                      isSelected ? colorScheme.primary : null,
-                                ),
-                              ),
-                            );
-                          },
-                          onChanged: (newValue) {
-                            if (newValue != null) {
-                              setState(
-                                  () => _maxConcurrentDownloads = newValue);
-                              _settingsService
-                                  .setMaxConcurrentDownloads(newValue);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _StyledLabel(l10n.concurrentDownloadsGlobal),
-                        CustomDropdown<int>(
-                          decoration: CustomDropdownDecoration(
-                              closedFillColor: colorScheme
-                                  .surfaceContainerHighest
-                                  .withOpacity(0.3),
-                              expandedFillColor: colorScheme.surface,
-                              closedBorder: Border.all(
-                                  color: colorScheme.outlineVariant
-                                      .withOpacity(0.5)),
-                              expandedBorder: Border.all(
-                                  color: colorScheme.primary.withOpacity(0.15)),
-                              closedBorderRadius: BorderRadius.circular(8),
-                              expandedBorderRadius: BorderRadius.circular(8),
-                              listItemDecoration: ListItemDecoration(
-                                splashColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                                highlightColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                              )),
-                          items: const [1, 2, 3, 4, 5, 6, 8, 10],
-                          initialItem: _maxConcurrentGlobalDownloads,
-                          headerBuilder: (context, selectedItem, c) {
-                            return Row(
-                              children: [
-                                const FIcon(RI.RiDownloadFill, size: 16),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '$selectedItem',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                          listItemBuilder:
-                              (context, item, isSelected, onItemSelect) {
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 0),
-                              child: Text(
-                                '$item',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color:
-                                      isSelected ? colorScheme.primary : null,
-                                ),
-                              ),
-                            );
-                          },
-                          onChanged: (newValue) {
-                            if (newValue != null) {
-                              setState(() =>
-                                  _maxConcurrentGlobalDownloads = newValue);
-                              _settingsService
-                                  .setMaxConcurrentGlobalDownloads(newValue);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _StyledLabel(l10n.language),
-                        CustomDropdown<String>(
-                          decoration: CustomDropdownDecoration(
-                              closedFillColor: colorScheme
-                                  .surfaceContainerHighest
-                                  .withOpacity(0.3),
-                              expandedFillColor: colorScheme.surface,
-                              closedBorder: Border.all(
-                                  color: colorScheme.outlineVariant
-                                      .withOpacity(0.5)),
-                              expandedBorder: Border.all(
-                                  color: colorScheme.primary.withOpacity(0.15)),
-                              closedBorderRadius: BorderRadius.circular(8),
-                              expandedBorderRadius: BorderRadius.circular(8),
-                              listItemDecoration: ListItemDecoration(
-                                splashColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                                highlightColor:
-                                    colorScheme.primary.withOpacity(0.05),
-                              )),
-                          items: const ['English', 'Italiano'],
-                          initialItem: currentLocale?.languageCode == 'it'
-                              ? 'Italiano'
-                              : 'English',
-                          headerBuilder: (context, selectedItem, c) {
-                            return Row(
-                              children: [
-                                const FIcon(RI.RiTranslate, size: 16),
-                                const SizedBox(width: 8),
-                                Text(
-                                  selectedItem,
-                                  style: GoogleFonts.montserrat(
-                                      fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            );
-                          },
-                          listItemBuilder:
-                              (context, item, isSelected, onItemSelect) {
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 0),
-                              child: Text(
-                                item,
-                                style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w400,
-                                  color:
-                                      isSelected ? colorScheme.primary : null,
-                                ),
-                              ),
-                            );
-                          },
-                          onChanged: (val) {
-                            if (val != null) {
-                              final locale = val == 'Italiano' ? 'it' : 'en';
-                              ref
-                                  .read(localeProvider.notifier)
-                                  .setLocale(Locale(locale));
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 48),
-
-              SectionHeader(title: l10n.settingsAI, icon: Icons.psychology),
-              const SizedBox(height: 8),
-              const OllamaModelSelector(),
-
-              const SizedBox(height: 48),
-
-              SectionHeader(
-                  title: l10n.settingsAppearance, icon: Icons.palette),
-              const SizedBox(height: 8),
-
-              // _StyledLabel(l10n.theme),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: colorScheme.outlineVariant.withOpacity(0.5))),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l10n.selectThemeTitle,
+                        Text(l10n.summaryAnimations,
                             style: GoogleFonts.montserrat(
                                 fontWeight: FontWeight.w500, fontSize: 13)),
-                        Text(l10n.settingsAppearanceSubtitle,
+                        Text(l10n.summaryAnimationsSubtitle,
                             style: GoogleFonts.montserrat(
                                 fontSize: 13,
                                 color: colorScheme.onSurfaceVariant)),
                       ],
                     ),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: colorScheme.outlineVariant.withOpacity(0.5)),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _ThemeButton(
-                            icon: RI.RiMagicLine,
-                            mode: ThemeMode.system,
-                            current: ref.watch(themeProvider).asData?.value ??
-                                ThemeMode.system,
-                            onTap: (m) => ref
-                                .read(themeProvider.notifier)
-                                .setThemeMode(m),
-                          ),
-                          const SizedBox(width: 4),
-                          _ThemeButton(
-                            icon: RI.RiSunLine,
-                            mode: ThemeMode.light,
-                            current: ref.watch(themeProvider).asData?.value ??
-                                ThemeMode.system,
-                            onTap: (m) => ref
-                                .read(themeProvider.notifier)
-                                .setThemeMode(m),
-                          ),
-                          const SizedBox(width: 4),
-                          _ThemeButton(
-                            icon: RI.RiMoonLine,
-                            mode: ThemeMode.dark,
-                            current: ref.watch(themeProvider).asData?.value ??
-                                ThemeMode.system,
-                            onTap: (m) => ref
-                                .read(themeProvider.notifier)
-                                .setThemeMode(m),
-                          ),
-                        ],
-                      ),
-                    )
-                  ],
-                ),
+                  ),
+                  Transform.scale(
+                    scale: 0.8,
+                    child: Switch(
+                      value: _summaryAnimationsEnabled,
+                      onChanged: (value) async {
+                        await _settingsService
+                            .setSummaryAnimationsEnabled(value);
+                        setState(() {
+                          _summaryAnimationsEnabled = value;
+                        });
+                      },
+                    ),
+                  ),
+                ],
               ),
+            ),
 
-              const SizedBox(height: 16),
+            const SizedBox(height: 48),
 
-              // Summary Animations Toggle
-              Container(
+            SectionHeader(title: l10n.settingsDataStorage, icon: Icons.storage),
+            const SizedBox(height: 8),
+
+            InkWell(
+              onTap: _showClearHistoryDialog,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: colorScheme.outlineVariant.withOpacity(0.5))),
+                  color: colorScheme.errorContainer.withOpacity(
+                      Theme.of(context).brightness == Brightness.dark
+                          ? 0.1
+                          : 0.2),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: colorScheme.error.withOpacity(0.3)),
+                ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    FIcon(
+                      RI.RiDeleteBinLine,
+                      color: colorScheme.error,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(l10n.summaryAnimations,
-                              style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w500, fontSize: 13)),
-                          Text(l10n.summaryAnimationsSubtitle,
-                              style: GoogleFonts.montserrat(
-                                  fontSize: 13,
-                                  color: colorScheme.onSurfaceVariant)),
+                          Text(
+                            l10n.clearDownloadHistory,
+                            style: GoogleFonts.montserrat(
+                              color: colorScheme.error,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            l10n.clearDownloadHistorySubtitle,
+                            style: GoogleFonts.montserrat(
+                              color: colorScheme.error.withOpacity(0.7),
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    Transform.scale(
-                      scale: 0.8,
-                      child: Switch(
-                        value: _summaryAnimationsEnabled,
-                        onChanged: (value) async {
-                          await _settingsService
-                              .setSummaryAnimationsEnabled(value);
-                          setState(() {
-                            _summaryAnimationsEnabled = value;
-                          });
-                        },
-                      ),
-                    ),
+                    Icon(Icons.chevron_right,
+                        color: colorScheme.error.withOpacity(0.5)),
                   ],
                 ),
               ),
+            ),
 
-              const SizedBox(height: 48),
+            const SizedBox(height: 60),
 
-              SectionHeader(
-                  title: l10n.settingsDataStorage, icon: Icons.storage),
-              const SizedBox(height: 8),
-
-              InkWell(
-                onTap: _showClearHistoryDialog,
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.errorContainer.withOpacity(
-                        Theme.of(context).brightness == Brightness.dark
-                            ? 0.1
-                            : 0.2),
-                    borderRadius: BorderRadius.circular(16),
-                    border:
-                        Border.all(color: colorScheme.error.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      FIcon(
-                        RI.RiDeleteBinLine,
-                        color: colorScheme.error,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l10n.clearDownloadHistory,
-                              style: GoogleFonts.montserrat(
-                                color: colorScheme.error,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Text(
-                              l10n.clearDownloadHistorySubtitle,
-                              style: GoogleFonts.montserrat(
-                                color: colorScheme.error.withOpacity(0.7),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right,
-                          color: colorScheme.error.withOpacity(0.5)),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 60),
-
-              // Version info
-              Center(
-                child: Column(
-                  children: [
-                    Text(
-                      l10n.versionInfo,
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant.withOpacity(0.6),
-                        fontSize: 13,
-                      ),
+            // Version info
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    l10n.versionInfo,
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant.withOpacity(0.6),
+                      fontSize: 13,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.copyright,
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant.withOpacity(0.4),
-                        fontSize: 13,
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l10n.copyright,
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                      fontSize: 13,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        )
-      ]),
-      loading: () => const Column(children: [
-        CategoryHeader(category: TaskCategory.settings),
-        Expanded(child: Center(child: CircularProgressIndicator())),
-      ]),
-      error: (error, stack) => Column(children: [
-        const CategoryHeader(category: TaskCategory.settings),
-        Expanded(child: Center(child: Text('Error loading settings: $error'))),
-      ]),
-    );
+            ),
+          ],
+        ),
+      )
+    ]);
   }
 }
 

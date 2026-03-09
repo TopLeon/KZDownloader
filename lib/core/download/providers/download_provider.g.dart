@@ -282,6 +282,50 @@ abstract class _$ActiveDownloadProgress
   }
 }
 
+@ProviderFor(globalDownloadStatus)
+const globalDownloadStatusProvider = GlobalDownloadStatusProvider._();
+
+final class GlobalDownloadStatusProvider extends $FunctionalProvider<
+    GlobalDownloadState,
+    GlobalDownloadState,
+    GlobalDownloadState> with $Provider<GlobalDownloadState> {
+  const GlobalDownloadStatusProvider._()
+      : super(
+          from: null,
+          argument: null,
+          retry: null,
+          name: r'globalDownloadStatusProvider',
+          isAutoDispose: true,
+          dependencies: null,
+          $allTransitiveDependencies: null,
+        );
+
+  @override
+  String debugGetCreateSourceHash() => _$globalDownloadStatusHash();
+
+  @$internal
+  @override
+  $ProviderElement<GlobalDownloadState> $createElement(
+          $ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  GlobalDownloadState create(Ref ref) {
+    return globalDownloadStatus(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(GlobalDownloadState value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<GlobalDownloadState>(value),
+    );
+  }
+}
+
+String _$globalDownloadStatusHash() =>
+    r'95712c428abae146dbf1a4db8c36ee0fd55f7a6d';
+
 @ProviderFor(DownloadList)
 const downloadListProvider = DownloadListProvider._();
 
@@ -306,7 +350,7 @@ final class DownloadListProvider
   DownloadList create() => DownloadList();
 }
 
-String _$downloadListHash() => r'9efeb7283a9585ad87d1abab284dfcb03ff906a3';
+String _$downloadListHash() => r'70bc49ada40f56a99954c8d959435acbda88c2ea';
 
 abstract class _$DownloadList extends $StreamNotifier<List<DownloadTask>> {
   Stream<List<DownloadTask>> build();

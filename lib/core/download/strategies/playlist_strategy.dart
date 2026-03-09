@@ -14,8 +14,22 @@ class PlaylistStrategy extends DownloadStrategy {
   final YtDlpService _service;
   bool _isCancelled = false;
   final List<Process> _activeProcesses = [];
+  final Map<int, double> _activeChildrenProgress = {};
 
-  PlaylistStrategy(super.taskId, super.db, super.ref, this._service);
+  /// Override the per-playlist concurrency from settings (1-6).
+  final int? overrideParallelDownloads;
+
+  /// If non-empty, only download videos at these 0-based indices from the playlist.
+  final Set<int> selectedVideoIndices;
+
+  PlaylistStrategy(
+    super.taskId,
+    super.db,
+    super.ref,
+    this._service, {
+    this.overrideParallelDownloads,
+    this.selectedVideoIndices = const {},
+  });
 
   @override
   Future<void> start(
@@ -53,46 +67,79 @@ class PlaylistStrategy extends DownloadStrategy {
       task.dirPath = playlistDir;
       await db.saveTask(task);
 
+      // Filter videos by selected indices (if any specific selection was made)
+      final List<Map<String, dynamic>> videosToDownload;
+      if (selectedVideoIndices.isNotEmpty) {
+        videosToDownload = [
+          for (int i = 0; i < videos.length; i++)
+            if (selectedVideoIndices.contains(i)) videos[i],
+        ];
+      } else {
+        videosToDownload = videos;
+      }
+
       // Process videos
       int completed = 0;
       final settings2 = SettingsService();
-      final concurrency = await settings2.getMaxConcurrentDownloads();
+      final settingsConcurrency = await settings2.getMaxConcurrentDownloads();
+      final concurrency = (overrideParallelDownloads ?? settingsConcurrency).clamp(1, 8);
 
-      for (int i = 0; i < videos.length && !_isCancelled; i += concurrency) {
-        final end = (i + concurrency).clamp(0, videos.length);
-        final batch = videos.sublist(i, end);
+      // Update total so progress bar reflects the actual download count
+      task.playlistTotalVideos = videosToDownload.length;
+      await db.saveTask(task);
+
+      final existingChildren = (await db.getAllTasks())
+          .where((t) => t.playlistParentId == taskId)
+          .toList();
+
+      for (int i = 0; i < videosToDownload.length && !_isCancelled; i += concurrency) {
+        final end = (i + concurrency).clamp(0, videosToDownload.length);
+        final batch = videosToDownload.sublist(i, end);
 
         final futures = batch.map((video) async {
           if (_isCancelled) return;
 
-          final videoUrl = video['url'] ?? video['webpage_url'];
+          final videoUrl = video['url'] as String? ?? video['webpage_url'] as String?;
           if (videoUrl == null) return;
 
-          // Resolve thumbnail from multiple possible keys
-          String? childThumbnail = video['thumbnail'] as String?;
-          if (childThumbnail == null && video['thumbnails'] is List) {
-            final thumbs = video['thumbnails'] as List;
-            if (thumbs.isNotEmpty && thumbs.last is Map) {
-              childThumbnail = thumbs.last['url'] as String?;
-            }
+          DownloadTask? childTask;
+          try {
+            childTask = existingChildren.firstWhere((t) => t.url == videoUrl);
+          } catch (_) {}
+
+          if (childTask != null &&
+              childTask.downloadStatus == WorkStatus.completed) {
+            completed++;
+            return; // Skip already completed
           }
 
-          final childTask = DownloadTask()
-            ..url = videoUrl
-            ..provider = task.provider
-            ..title = video['title'] ?? 'Video'
-            ..thumbnail = childThumbnail
-            ..channelName = video['channel'] ?? video['uploader']
-            ..category = task.category
-            ..downloadStatus = WorkStatus.running
-            ..playlistParentId = taskId;
+          if (childTask == null) {
+            // Resolve thumbnail from multiple possible keys
+            String? childThumbnail = video['thumbnail'] as String?;
+            if (childThumbnail == null && video['thumbnails'] is List) {
+              final thumbs = video['thumbnails'] as List;
+              if (thumbs.isNotEmpty && thumbs.last is Map) {
+                childThumbnail = thumbs.last['url'] as String?;
+              }
+            }
 
+            childTask = DownloadTask()
+              ..url = videoUrl
+              ..provider = task.provider
+              ..title = video['title'] ?? 'Video'
+              ..thumbnail = childThumbnail
+              ..channelName = video['channel'] ?? video['uploader']
+              ..category = task.category
+              ..playlistParentId = taskId;
+          }
+
+          childTask.downloadStatus = WorkStatus.running;
           await db.saveTask(childTask);
 
           try {
             final childId = childTask.id;
             final childFilename = FileUtils.sanitizeFilename(
-                '${completed + 1} - ${childTask.title ?? "Video"}');
+                childTask.title ?? "Video");
 
             final format0 = _resolveFormat(format, isAudio: isAudio);
             final quality0 = _resolveQuality(quality);
@@ -114,7 +161,9 @@ class PlaylistStrategy extends DownloadStrategy {
 
             _activeProcesses.add(process);
 
-            process.stdout.transform(const SystemEncoding().decoder).listen((line) {
+            process.stdout
+                .transform(const SystemEncoding().decoder)
+                .listen((line) {
               for (var l in line.split('\n')) {
                 l = l.trim();
                 if (l.isEmpty) continue;
@@ -122,18 +171,24 @@ class PlaylistStrategy extends DownloadStrategy {
                 if (progress != null) {
                   final childProgress = (progress['progress'] ?? 0.0) / 100.0;
 
+                  _activeChildrenProgress[childId] = childProgress;
+                  double runningSum = 0.0;
+                  for (final val in _activeChildrenProgress.values) {
+                    runningSum += val;
+                  }
+
                   // Update parent container with overall progress
                   updateProgress({
-                    'progress': (completed + childProgress) / videos.length,
+                    'progress': (completed + runningSum) / videosToDownload.length,
                     'downloadSpeed': progress['speed'],
-                    'childTitle': childTask.title,
+                    'childTitle': childTask?.title,
                     'childProgress': childProgress,
                   });
 
                   // Update individual child task so its UI row updates
                   try {
-                    final notifier = ref.container.read(
-                        activeDownloadProgressProvider.notifier);
+                    final notifier =
+                        ref.read(activeDownloadProgressProvider.notifier);
                     notifier.update(childId, {
                       'progress': childProgress,
                       'downloadSpeed': progress['speed'],
@@ -147,13 +202,13 @@ class PlaylistStrategy extends DownloadStrategy {
 
             final exitCode = await process.exitCode;
             _activeProcesses.remove(process);
+            _activeChildrenProgress.remove(childId);
 
             if (_isCancelled) return;
 
             // Remove child live progress entry
             try {
-              ref.container.read(activeDownloadProgressProvider.notifier)
-                  .remove(childId);
+              ref.read(activeDownloadProgressProvider.notifier).remove(childId);
             } catch (_) {}
 
             final child = await db.getTask(childId);
@@ -169,8 +224,9 @@ class PlaylistStrategy extends DownloadStrategy {
                   child.filePath = expectedChildPath;
                 } else {
                   // Scan for the actual file if extension differs
-                  child.filePath = await _findChildFile(
-                      playlistDir, childFilename) ?? expectedChildPath;
+                  child.filePath =
+                      await _findChildFile(playlistDir, childFilename) ??
+                          expectedChildPath;
                 }
               }
 
@@ -189,7 +245,8 @@ class PlaylistStrategy extends DownloadStrategy {
         final container = await db.getTask(taskId);
         if (container != null) {
           container.playlistCompletedVideos = completed;
-          container.progress = videos.isNotEmpty ? completed / videos.length : 0.0;
+          container.progress =
+              videosToDownload.isNotEmpty ? completed / videosToDownload.length : 0.0;
           await db.saveTask(container);
         }
       }
@@ -229,32 +286,66 @@ class PlaylistStrategy extends DownloadStrategy {
 
   DownloadFormat _resolveFormat(String? format, {bool isAudio = false}) {
     switch (format?.toLowerCase()) {
-      case 'mp4': return DownloadFormat.mp4;
-      case 'mkv': return DownloadFormat.mkv;
-      case 'mp3': return DownloadFormat.mp3;
-      case 'm4a': return DownloadFormat.m4a;
-      case 'ogg': return DownloadFormat.ogg;
-      default: return isAudio ? DownloadFormat.mp3 : DownloadFormat.mp4;
+      case 'mp4':
+        return DownloadFormat.mp4;
+      case 'mkv':
+        return DownloadFormat.mkv;
+      case 'mp3':
+        return DownloadFormat.mp3;
+      case 'm4a':
+        return DownloadFormat.m4a;
+      case 'ogg':
+        return DownloadFormat.ogg;
+      default:
+        return isAudio ? DownloadFormat.mp3 : DownloadFormat.mp4;
     }
   }
 
   DownloadQuality _resolveQuality(String? quality) {
     switch (quality?.toLowerCase()) {
-      case 'best': return DownloadQuality.best;
-      case 'high': case '1080': case '1080p': return DownloadQuality.p1080;
-      case 'medium': case '720': case '720p': return DownloadQuality.p720;
-      case 'low': case '480': case '480p': return DownloadQuality.p480;
-      case '1440': case '1440p': return DownloadQuality.p1440;
-      case '2160': case '2160p': case '4k': return DownloadQuality.p2160;
-      default: return DownloadQuality.best;
+      case 'best':
+        return DownloadQuality.best;
+      case 'high':
+      case '1080':
+      case '1080p':
+        return DownloadQuality.p1080;
+      case 'medium':
+      case '720':
+      case '720p':
+        return DownloadQuality.p720;
+      case 'low':
+      case '480':
+      case '480p':
+        return DownloadQuality.p480;
+      case '1440':
+      case '1440p':
+        return DownloadQuality.p1440;
+      case '2160':
+      case '2160p':
+      case '4k':
+        return DownloadQuality.p2160;
+      default:
+        return DownloadQuality.best;
     }
+  }
+
+  void _killProcess(Process? process) {
+    if (process == null) return;
+    try {
+      if (Platform.isWindows) {
+        Process.runSync(
+            'taskkill', ['/F', '/T', '/PID', process.pid.toString()]);
+      } else {
+        process.kill(ProcessSignal.sigkill);
+      }
+    } catch (_) {}
   }
 
   @override
   Future<void> pause() async {
     _isCancelled = true;
     for (var p in _activeProcesses) {
-      try { p.kill(); } catch (_) {}
+      _killProcess(p);
     }
     _activeProcesses.clear();
 
@@ -262,6 +353,18 @@ class PlaylistStrategy extends DownloadStrategy {
     if (task != null) {
       task.downloadStatus = WorkStatus.paused;
       await db.saveTask(task);
+
+      final children =
+          (await db.getAllTasks()).where((t) => t.playlistParentId == taskId);
+      for (var child in children) {
+        if (!child.downloadStatus.isFinished) {
+          child.downloadStatus = WorkStatus.paused;
+          await db.saveTask(child);
+          try {
+            ref.read(activeDownloadProgressProvider.notifier).remove(child.id);
+          } catch (_) {}
+        }
+      }
     }
     removeProgress();
   }
@@ -270,7 +373,7 @@ class PlaylistStrategy extends DownloadStrategy {
   Future<void> cancel() async {
     _isCancelled = true;
     for (var p in _activeProcesses) {
-      try { p.kill(); } catch (_) {}
+      _killProcess(p);
     }
     _activeProcesses.clear();
     removeProgress();

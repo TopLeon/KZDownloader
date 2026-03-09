@@ -107,6 +107,12 @@ class DownloadManager {
 
   bool hasActive(int taskId) => _strategies.containsKey(taskId);
 
+  /// Expose running task IDs for UI consumption.
+  Set<int> get runningTaskIds => Set.unmodifiable(_runningTaskIds);
+
+  /// All registered strategy IDs (running + queued).
+  Set<int> get allStrategyIds => _strategies.keys.toSet();
+
   int get runningCount => _runningTaskIds.length;
   int get queuedCount => _queue.length;
 
@@ -117,6 +123,11 @@ class DownloadManager {
     _strategies.clear();
     _runningTaskIds.clear();
     _queue.clear();
+  }
+
+  Future<void> resumeAll() async {
+    // Not typically implemented at the strategy level directly (usually re-queued),
+    // but provided here for completeness if required.
   }
 
   Future<void> cancelAll() async {

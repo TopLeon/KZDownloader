@@ -42,8 +42,8 @@ class YtDlpStrategy extends DownloadStrategy {
       if (task.title != null && task.title!.isNotEmpty) {
         sanitizedFilename = FileUtils.sanitizeFilename(task.title!);
         if (sanitizedFilename.contains('.')) {
-          sanitizedFilename =
-              sanitizedFilename.substring(0, sanitizedFilename.lastIndexOf('.'));
+          sanitizedFilename = sanitizedFilename.substring(
+              0, sanitizedFilename.lastIndexOf('.'));
         }
       }
 
@@ -55,7 +55,8 @@ class YtDlpStrategy extends DownloadStrategy {
       // Compute the final file path deterministically before starting yt-dlp
       final ext = _formatExtension(targetFormat);
       final baseName = sanitizedFilename ?? task.title ?? 'download';
-      final expectedFilePath = '$targetDir${Platform.pathSeparator}$baseName.$ext';
+      final expectedFilePath =
+          '$targetDir${Platform.pathSeparator}$baseName.$ext';
 
       // Save expected path to DB before starting, so UI always has the right dir
       await db.updateFilePath(taskId, expectedFilePath, targetDir);
@@ -69,7 +70,9 @@ class YtDlpStrategy extends DownloadStrategy {
         customFilename: sanitizedFilename,
       );
 
-      _stdoutSub = _process!.stdout.transform(const SystemEncoding().decoder).listen((line) {
+      _stdoutSub = _process!.stdout
+          .transform(const SystemEncoding().decoder)
+          .listen((line) {
         if (_isCancelled) return;
         for (var l in line.split('\n')) {
           l = l.trim();
@@ -88,7 +91,9 @@ class YtDlpStrategy extends DownloadStrategy {
         }
       });
 
-      _stderrSub = _process!.stderr.transform(const SystemEncoding().decoder).listen((line) {
+      _stderrSub = _process!.stderr
+          .transform(const SystemEncoding().decoder)
+          .listen((line) {
         if (_isCancelled) return;
         debugPrint('yt-dlp stderr: $line');
       });
@@ -146,7 +151,8 @@ class YtDlpStrategy extends DownloadStrategy {
           .toList();
 
       if (files.isNotEmpty) {
-        files.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+        files.sort(
+            (a, b) => b.statSync().modified.compareTo(a.statSync().modified));
         await db.updateFilePath(taskId, files.first.path, targetDir);
       }
     } catch (e) {
@@ -200,14 +206,24 @@ class YtDlpStrategy extends DownloadStrategy {
     }
   }
 
+  void _killProcess(Process? process) {
+    if (process == null) return;
+    try {
+      if (Platform.isWindows) {
+        Process.runSync(
+            'taskkill', ['/F', '/T', '/PID', process.pid.toString()]);
+      } else {
+        process.kill(ProcessSignal.sigkill);
+      }
+    } catch (_) {}
+  }
+
   @override
   Future<void> pause() async {
     _isCancelled = true;
     await _stdoutSub?.cancel();
     await _stderrSub?.cancel();
-    try {
-      _process?.kill();
-    } catch (_) {}
+    _killProcess(_process);
 
     final task = await db.getTask(taskId);
     if (task != null) {
@@ -224,9 +240,7 @@ class YtDlpStrategy extends DownloadStrategy {
     _isCancelled = true;
     await _stdoutSub?.cancel();
     await _stderrSub?.cancel();
-    try {
-      _process?.kill();
-    } catch (_) {}
+    _killProcess(_process);
     removeProgress();
   }
 }

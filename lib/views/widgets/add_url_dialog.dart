@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:kzdownloader/core/providers/quality_provider.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
 import 'package:kzdownloader/views/chat/widgets/input/chat_input_area.dart';
 import 'package:kzdownloader/models/download_task.dart';
@@ -27,6 +26,9 @@ class _AddUrlDialogState extends ConsumerState<AddUrlDialog> {
   bool _showVideoOptions = false;
   bool _isAudio = false;
   bool _summarizeOnly = false;
+  String _selectedQuality = 'best';
+  int _parallelDownloads = 3;
+  Set<int> _selectedVideoIndices = {};
 
   @override
   void initState() {
@@ -66,14 +68,15 @@ class _AddUrlDialogState extends ConsumerState<AddUrlDialog> {
   }
 
   void _handleSubmit() {
-    final qualitySettings = ref.read(qualitySettings_Provider).asData?.value;
-    if (_controller.text.trim().isNotEmpty && qualitySettings != null) {
+    if (_controller.text.trim().isNotEmpty) {
       Navigator.of(context).pop({
         'url': _controller.text.trim(),
         'provider': _selectedProvider,
-        'quality': qualitySettings.toDisplayString(),
+        'quality': _selectedQuality,
         'isAudio': _isAudio,
         'summarizeOnly': _summarizeOnly,
+        'parallelDownloads': _parallelDownloads,
+        'selectedVideoIndices': _selectedVideoIndices,
       });
     }
   }
@@ -82,7 +85,6 @@ class _AddUrlDialogState extends ConsumerState<AddUrlDialog> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final l10n = AppLocalizations.of(context)!;
-    final qualitySettingsAsync = ref.watch(qualitySettings_Provider);
 
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
@@ -179,144 +181,51 @@ class _AddUrlDialogState extends ConsumerState<AddUrlDialog> {
                       ),
                     ),
                   ),
-                qualitySettingsAsync.when(
-                  data: (qualitySettings) => ChatInputArea(
-                    controller: _controller,
-                    selectedProvider: _selectedProvider,
-                    showVideoOptions: _showVideoOptions,
-                    selectedQuality: qualitySettings.toDisplayString(),
-                    isAudio: _isAudio,
-                    summarizeOnly: _summarizeOnly,
-                    isCentered: false,
-                    qualityMode: qualitySettings.mode,
-                    onSubmit: _handleSubmit,
-                    onProviderChanged: (value) {
-                      setState(() {
-                        _selectedProvider = value;
-                      });
-                    },
-                    onQualityChanged: (value) async {
-                      // Convert display string to DownloadQuality enum
-                      DownloadQuality quality;
-                      switch (value.toLowerCase()) {
-                        case 'best':
-                          quality = DownloadQuality.best;
-                          break;
-                        case 'high':
-                          quality = DownloadQuality.high;
-                          break;
-                        case 'medium':
-                          quality = DownloadQuality.medium;
-                          break;
-                        case 'low':
-                          quality = DownloadQuality.low;
-                          break;
-                        case '2160p':
-                          quality = DownloadQuality.p2160;
-                          break;
-                        case '1440p':
-                          quality = DownloadQuality.p1440;
-                          break;
-                        case '1080p':
-                          quality = DownloadQuality.p1080;
-                          break;
-                        case '720p':
-                          quality = DownloadQuality.p720;
-                          break;
-                        case '480p':
-                          quality = DownloadQuality.p480;
-                          break;
-                        default:
-                          quality = DownloadQuality.best;
-                      }
-                      await ref
-                          .read(qualitySettings_Provider.notifier)
-                          .setQuality(quality);
-                    },
-                    onIsAudioChanged: (value) {
-                      setState(() {
-                        _isAudio = value;
-                      });
-                    },
-                    onSummarizeOnlyChanged: (value) {
-                      setState(() {
-                        _summarizeOnly = value;
-                      });
-                    },
-                    onPrefetchStateChanged: (isPrefetching) {
-                      //setState(() {
-                      //_isPrefetching = isPrefetching;
-                      //});
-                    },
-                    onMetadataFetched: () {
-                      // Metadata fetched callback
-                    },
-                  ),
-                  loading: () => ChatInputArea(
-                    controller: _controller,
-                    selectedProvider: _selectedProvider,
-                    showVideoOptions: _showVideoOptions,
-                    selectedQuality: 'Best',
-                    isAudio: _isAudio,
-                    summarizeOnly: _summarizeOnly,
-                    isCentered: false,
-                    qualityMode: QualityMode.simple,
-                    onSubmit: _handleSubmit,
-                    onProviderChanged: (value) {
-                      setState(() {
-                        _selectedProvider = value;
-                      });
-                    },
-                    onQualityChanged: (_) {},
-                    onIsAudioChanged: (value) {
-                      setState(() {
-                        _isAudio = value;
-                      });
-                    },
-                    onSummarizeOnlyChanged: (value) {
-                      setState(() {
-                        _summarizeOnly = value;
-                      });
-                    },
-                    onPrefetchStateChanged: (isPrefetching) {},
-                    onMetadataFetched: () {},
-                  ),
-                  error: (error, stack) => ChatInputArea(
-                    controller: _controller,
-                    selectedProvider: _selectedProvider,
-                    showVideoOptions: _showVideoOptions,
-                    selectedQuality: 'Best',
-                    isAudio: _isAudio,
-                    summarizeOnly: _summarizeOnly,
-                    isCentered: false,
-                    qualityMode: QualityMode.simple,
-                    onSubmit: _handleSubmit,
-                    onProviderChanged: (value) {
-                      setState(() {
-                        _selectedProvider = value;
-                      });
-                    },
-                    onQualityChanged: (_) {},
-                    onIsAudioChanged: (value) {
-                      setState(() {
-                        _isAudio = value;
-                      });
-                    },
-                    onSummarizeOnlyChanged: (value) {
-                      setState(() {
-                        _summarizeOnly = value;
-                      });
-                    },
-                    onPrefetchStateChanged: (isPrefetching) {},
-                    onMetadataFetched: () {},
-                  ),
+                ChatInputArea(
+                  controller: _controller,
+                  selectedProvider: _selectedProvider,
+                  showVideoOptions: _showVideoOptions,
+                  selectedQuality: _selectedQuality,
+                  isAudio: _isAudio,
+                  summarizeOnly: _summarizeOnly,
+                  isCentered: false,
+                  onSubmit: _handleSubmit,
+                  onProviderChanged: (value) {
+                    setState(() {
+                      _selectedProvider = value;
+                    });
+                  },
+                  onQualityChanged: (value) {
+                    setState(() {
+                      _selectedQuality = value;
+                    });
+                  },
+                  onIsAudioChanged: (value) {
+                    setState(() {
+                      _isAudio = value;
+                    });
+                  },
+                  onSummarizeOnlyChanged: (value) {
+                    setState(() {
+                      _summarizeOnly = value;
+                    });
+                  },
+                  onPrefetchStateChanged: (isPrefetching) {},
+                  onMetadataFetched: () {},
+                  onParallelDownloadsChanged: (val) {
+                    setState(() => _parallelDownloads = val);
+                  },
+                  onSelectedVideoIndicesChanged: (indices) {
+                    setState(() => _selectedVideoIndices = indices);
+                  },
                 ),
                 const SizedBox(height: 20),
                 Center(
                   child: TextButton(
                     onPressed: () => Navigator.of(context).pop(),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 16, horizontal: 24),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),

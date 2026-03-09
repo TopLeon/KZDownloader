@@ -22,6 +22,7 @@ macos/build
 new_screenshots/
 RACE_CONDITION_FIXES.md
 LICENSE.txt
+others/
 
 # generated
 rust_builder/

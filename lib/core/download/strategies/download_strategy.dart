@@ -21,8 +21,7 @@ abstract class DownloadStrategy {
   // Updates the real-time progress map (bypasses Isar for performance).
   void updateProgress(Map<String, dynamic> data) {
     try {
-      final container = ref.container;
-      final notifier = container.read(activeDownloadProgressProvider.notifier);
+      final notifier = ref.read(activeDownloadProgressProvider.notifier);
       notifier.update(taskId, data);
     } catch (e) {
       debugPrint('Progress update skipped: $e');
@@ -32,8 +31,7 @@ abstract class DownloadStrategy {
   // Removes this task's entry from the live progress map.
   void removeProgress() {
     try {
-      final container = ref.container;
-      final notifier = container.read(activeDownloadProgressProvider.notifier);
+      final notifier = ref.read(activeDownloadProgressProvider.notifier);
       notifier.remove(taskId);
     } catch (e) {
       debugPrint('Progress removal skipped: $e');
@@ -45,7 +43,7 @@ abstract class DownloadStrategy {
     // Capture totalSize from live progress before clearing it
     String? liveTotal;
     try {
-      final progressMap = ref.container.read(activeDownloadProgressProvider);
+      final progressMap = ref.read(activeDownloadProgressProvider);
       liveTotal = progressMap[taskId]?['totalSize'] as String?;
     } catch (_) {}
 

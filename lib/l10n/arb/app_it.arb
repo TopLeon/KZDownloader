@@ -472,9 +472,6 @@
     "code": "Codice",
     "executable": "Eseguibile",
     "file": "File",
-    "qualityMode": "Modalità Qualità",
-    "qualityModeSimple": "Semplice",
-    "qualityModeExpert": "Esperta",
     "hour": "ora",
     "hours": "ore",
     "minute": "minuto",
@@ -523,5 +520,42 @@
     "queued": "In coda",
     "diskSpace": "Spazio su disco",
     "insufficientDiskSpace": "Spazio su disco insufficiente",
-    "folderNotSelected": "Nessuna cartella selezionata"
+    "folderNotSelected": "Nessuna cartella selezionata",
+    "m3u8Playlist": "Playlist M3U8",
+    "pauseAll": "Pausa Tutti",
+    "resumeAll": "Riprendi Tutti",
+    "cancelAll": "Annulla Tutti",
+    "activeDownloadsCount": "{count} download",
+    "@activeDownloadsCount": {
+        "placeholders": {
+            "count": {
+                "type": "String"
+            }
+        }
+    },
+    "pausedDownloads": "In pausa",
+    "downloadProgress": "{progress}%",
+    "@downloadProgress": {
+        "placeholders": {
+            "progress": {
+                "type": "String"
+            }
+        }
+    },
+    "singleDownload": "{count} download",
+    "@singleDownload": {
+        "placeholders": {
+            "count": {
+                "type": "String"
+            }
+        }
+    },
+    "cancelAllConfirmTitle": "Annullare tutti i download?",
+    "cancelAllConfirmMessage": "Questo annullerà tutti i download attivi e in pausa. L'azione non può essere annullata.",
+    "exportM3u8": "Esporta M3U8",
+    "importM3u8": "Importa M3U8",
+    "exportSuccess": "Esportazione completata",
+    "importSuccess": "Importazione completata",
+    "noMatchingTracks": "Nessun brano trovato",
+    "autoplay": "Riproduzione Automatica"
 }

@@ -14,11 +14,17 @@ class CategoryHeader extends ConsumerStatefulWidget {
   final ValueChanged<String>? onSearchChanged;
   final ValueChanged<DownloadTask>? onTaskAdded;
 
+  /// Se fornito, viene chiamato al tap sul pulsante "Add URL" invece di
+  /// mostrare il dialog. Il ChatScreen usa questo per navigare alla Home
+  /// e mettere a fuoco il campo di input.
+  final VoidCallback? onAddUrl;
+
   const CategoryHeader({
     super.key,
     required this.category,
     this.onSearchChanged,
     this.onTaskAdded,
+    this.onAddUrl,
   });
 
   @override
@@ -99,6 +105,12 @@ class _CategoryHeaderNewState extends ConsumerState<CategoryHeader> {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () async {
+                    if (widget.onAddUrl != null) {
+                      widget.onAddUrl!();
+                      return;
+                    }
+
+                    // Fallback: mostra il dialog se nessun callback è fornito
                     final result = await showAddUrlDialog(
                       context,
                       category: widget.category,
@@ -111,8 +123,11 @@ class _CategoryHeaderNewState extends ConsumerState<CategoryHeader> {
                             result['url'],
                             result['provider'],
                             quality: result['quality'],
-                            isAudio: result['isAudio'],
-                            onlySummary: result['summarizeOnly'],
+                            isAudio: result['isAudio'] as bool? ?? false,
+                            onlySummary: result['summarizeOnly'] as bool? ?? false,
+                            parallelDownloads: result['parallelDownloads'] as int?,
+                            selectedVideoIndices:
+                                result['selectedVideoIndices'] as Set<int>?,
                           ))!;
 
                       widget.onTaskAdded?.call(newTask);

@@ -1261,15 +1261,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get file => 'File';
 
   @override
-  String get qualityMode => 'Quality Mode';
-
-  @override
-  String get qualityModeSimple => 'Simple';
-
-  @override
-  String get qualityModeExpert => 'Expert';
-
-  @override
   String get hour => 'hour';
 
   @override
@@ -1368,4 +1359,59 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get folderNotSelected => 'No folder selected';
+
+  @override
+  String get m3u8Playlist => 'M3U8 Playlist';
+
+  @override
+  String get pauseAll => 'Pause All';
+
+  @override
+  String get resumeAll => 'Resume All';
+
+  @override
+  String get cancelAll => 'Cancel All';
+
+  @override
+  String activeDownloadsCount(String count) {
+    return '$count downloads';
+  }
+
+  @override
+  String get pausedDownloads => 'Paused';
+
+  @override
+  String downloadProgress(String progress) {
+    return '$progress%';
+  }
+
+  @override
+  String singleDownload(String count) {
+    return '$count download';
+  }
+
+  @override
+  String get cancelAllConfirmTitle => 'Cancel All Downloads?';
+
+  @override
+  String get cancelAllConfirmMessage =>
+      'This will cancel all active and paused downloads. This action cannot be undone.';
+
+  @override
+  String get exportM3u8 => 'Export M3U8';
+
+  @override
+  String get importM3u8 => 'Import M3U8';
+
+  @override
+  String get exportSuccess => 'Export successful';
+
+  @override
+  String get importSuccess => 'Import successful';
+
+  @override
+  String get noMatchingTracks => 'No matching tracks found';
+
+  @override
+  String get autoplay => 'Autoplay';
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:animated_custom_dropdown/custom_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/core/download/providers/download_provider.dart';
 import 'package:kzdownloader/core/download/providers/playlist_provider.dart';
 import 'package:kzdownloader/core/services/audio_player_service.dart';
@@ -24,6 +25,7 @@ class MusicScreen extends ConsumerStatefulWidget {
   final Function(String) onSearchChanged;
   final Function(SortOption) onSortChanged;
   final Function(DownloadTask) onTaskSelected;
+  final VoidCallback? onAddUrl;
 
   const MusicScreen({
     super.key,
@@ -32,6 +34,7 @@ class MusicScreen extends ConsumerStatefulWidget {
     required this.onSearchChanged,
     required this.onSortChanged,
     required this.onTaskSelected,
+    this.onAddUrl,
   });
 
   @override
@@ -88,7 +91,8 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
                           CategoryHeader(
                               category: TaskCategory.music,
                               onSearchChanged: widget.onSearchChanged,
-                              onTaskAdded: widget.onTaskSelected),
+                              onTaskAdded: widget.onTaskSelected,
+                              onAddUrl: widget.onAddUrl),
                           Expanded(
                             child: ListView(
                               shrinkWrap: true,
@@ -227,10 +231,10 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
                                                     Text(
                                                       getSortOptionLabel(
                                                           selectedItem, l10n),
-                                                      style: TextStyle(
+                                                      style: GoogleFonts.montserrat(
                                                         fontSize: 14,
                                                         fontWeight:
-                                                            FontWeight.w600,
+                                                            FontWeight.w500,
                                                         color: colorScheme
                                                             .onSurface,
                                                       ),
@@ -269,7 +273,8 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
                   CategoryHeader(
                       category: TaskCategory.music,
                       onSearchChanged: widget.onSearchChanged,
-                      onTaskAdded: widget.onTaskSelected),
+                      onTaskAdded: widget.onTaskSelected,
+                      onAddUrl: widget.onAddUrl),
                   Expanded(
                     child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,10 +417,10 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
                                                     Text(
                                                       getSortOptionLabel(
                                                           selectedItem, l10n),
-                                                      style: TextStyle(
+                                                      style: GoogleFonts.montserrat(
                                                         fontSize: 14,
                                                         fontWeight:
-                                                            FontWeight.w600,
+                                                            FontWeight.w500,
                                                         color: colorScheme
                                                             .onSurface,
                                                       ),

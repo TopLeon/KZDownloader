@@ -10,7 +10,6 @@ class SettingsService {
   static const String _keyDefaultFormat = 'default_format';
   static const String _keyDefaultAudioFormat = 'default_audio_format';
   static const String _keyDefaultQuality = 'default_quality';
-  static const String _keyQualityMode = 'quality_mode';
   static const String _keyLanguage = 'language';
   static const String _keyThemeMode = 'theme_mode';
   static const String _aiModelKey = 'ai_selected_model';
@@ -139,36 +138,16 @@ class SettingsService {
     await prefs.setString(_keyDefaultAudioFormat, format.name);
   }
 
-  // Gets the default download quality.
-  Future<DownloadQuality> getDefaultQuality() async {
+  // Gets the default download quality as a string (e.g., 'best', '1080p').
+  Future<String> getDefaultQuality() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_keyDefaultQuality);
-    return DownloadQuality.values.firstWhere(
-      (e) => e.name == value,
-      orElse: () => DownloadQuality.best,
-    );
+    return prefs.getString(_keyDefaultQuality) ?? 'best';
   }
 
   // Sets the default download quality.
-  Future<void> setDefaultQuality(DownloadQuality quality) async {
+  Future<void> setDefaultQuality(String quality) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyDefaultQuality, quality.name);
-  }
-
-  // Gets the quality mode (simple or expert).
-  Future<QualityMode> getQualityMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_keyQualityMode);
-    return QualityMode.values.firstWhere(
-      (e) => e.name == value,
-      orElse: () => QualityMode.simple,
-    );
-  }
-
-  // Sets the quality mode.
-  Future<void> setQualityMode(QualityMode mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyQualityMode, mode.name);
+    await prefs.setString(_keyDefaultQuality, quality);
   }
 
   // Gets the maximum number of concurrent downloads for playlists.
@@ -200,10 +179,17 @@ class SettingsService {
 enum DownloadFormat { mp4, mkv, mp3, m4a, ogg }
 
 // Supported download qualities.
-enum DownloadQuality { best, high, medium, low, p2160, p1440, p1080, p720, p480 }
-
-// Quality mode selection (simple or expert).
-enum QualityMode { simple, expert }
+enum DownloadQuality {
+  best,
+  high,
+  medium,
+  low,
+  p2160,
+  p1440,
+  p1080,
+  p720,
+  p480
+}
 
 @Riverpod(keepAlive: true)
 SettingsService settingsService(Ref ref) {

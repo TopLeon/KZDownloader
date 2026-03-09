@@ -7,6 +7,7 @@ import 'package:kzdownloader/core/download/providers/download_provider.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
 import 'package:kzdownloader/models/download_task.dart';
 import 'package:kzdownloader/views/chat/widgets/audio_player_bar.dart';
+import 'package:kzdownloader/views/chat/widgets/download_status_widget.dart';
 import 'package:ultimate_flutter_icons/ficon.dart';
 import 'package:ultimate_flutter_icons/icons/ri.dart';
 import 'package:window_manager/window_manager.dart';
@@ -61,8 +62,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
             t.summaryStatus.isActive)
         .length;
 
-    int getFailedCount() =>
-        downloadList.where((t) => t.downloadStatus == WorkStatus.failed).length;
+    int getFailedCount() => downloadList
+        .where((t) =>
+            t.downloadStatus == WorkStatus.failed && t.playlistParentId == null)
+        .length;
 
     return Container(
       width: widget.isMinimized ? 80 : 240,
@@ -310,6 +313,9 @@ class _SidebarState extends ConsumerState<Sidebar> {
           ),
           // Audio Player Bar
           if (!widget.isMinimized) const AudioPlayerBar(),
+
+          DownloadStatusWidget(isMinimized: widget.isMinimized),
+
           const SizedBox(height: 16),
           Padding(
             padding:

@@ -2474,24 +2474,6 @@ abstract class AppLocalizations {
   /// **'File'**
   String get file;
 
-  /// No description provided for @qualityMode.
-  ///
-  /// In en, this message translates to:
-  /// **'Quality Mode'**
-  String get qualityMode;
-
-  /// No description provided for @qualityModeSimple.
-  ///
-  /// In en, this message translates to:
-  /// **'Simple'**
-  String get qualityModeSimple;
-
-  /// No description provided for @qualityModeExpert.
-  ///
-  /// In en, this message translates to:
-  /// **'Expert'**
-  String get qualityModeExpert;
-
   /// No description provided for @hour.
   ///
   /// In en, this message translates to:
@@ -2677,6 +2659,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No folder selected'**
   String get folderNotSelected;
+
+  /// No description provided for @m3u8Playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'M3U8 Playlist'**
+  String get m3u8Playlist;
+
+  /// No description provided for @pauseAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause All'**
+  String get pauseAll;
+
+  /// No description provided for @resumeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume All'**
+  String get resumeAll;
+
+  /// No description provided for @cancelAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel All'**
+  String get cancelAll;
+
+  /// No description provided for @activeDownloadsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} downloads'**
+  String activeDownloadsCount(String count);
+
+  /// No description provided for @pausedDownloads.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get pausedDownloads;
+
+  /// No description provided for @downloadProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{progress}%'**
+  String downloadProgress(String progress);
+
+  /// No description provided for @singleDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} download'**
+  String singleDownload(String count);
+
+  /// No description provided for @cancelAllConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel All Downloads?'**
+  String get cancelAllConfirmTitle;
+
+  /// No description provided for @cancelAllConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This will cancel all active and paused downloads. This action cannot be undone.'**
+  String get cancelAllConfirmMessage;
+
+  /// No description provided for @exportM3u8.
+  ///
+  /// In en, this message translates to:
+  /// **'Export M3U8'**
+  String get exportM3u8;
+
+  /// No description provided for @importM3u8.
+  ///
+  /// In en, this message translates to:
+  /// **'Import M3U8'**
+  String get importM3u8;
+
+  /// No description provided for @exportSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Export successful'**
+  String get exportSuccess;
+
+  /// No description provided for @importSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Import successful'**
+  String get importSuccess;
+
+  /// No description provided for @noMatchingTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching tracks found'**
+  String get noMatchingTracks;
+
+  /// No description provided for @autoplay.
+  ///
+  /// In en, this message translates to:
+  /// **'Autoplay'**
+  String get autoplay;
 }
 
 class _AppLocalizationsDelegate
