@@ -192,7 +192,6 @@ lib/
 | Feature | Status |
 |---|---|
 | **Browser integration** — capture downloads directly from Chrome / Firefox via a companion extension | 🔜 Planned |
-| **HLS / M3U8 streaming support** — download and remux adaptive video streams | 🔜 Planned |
 
 ## ⚠️ Known Issues
 
