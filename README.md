@@ -86,7 +86,7 @@ The design is modern, minimal, and fully reactive, featuring animated neon/rainb
 ## 🕹️ Demo
 
 
-https://github.com/user-attachments/assets/72707ddb-4424-479b-a487-96114dd70004
+https://github.com/user-attachments/assets/024d8e8c-fddb-4685-95f1-4b4d1f3212e6
 
 
 
