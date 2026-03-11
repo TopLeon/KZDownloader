@@ -1414,4 +1414,58 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoplay => 'Autoplay';
+
+  @override
+  String get advancedOptions => 'Advanced Options';
+
+  @override
+  String get globalSpeedLimit => 'Global Speed Limit';
+
+  @override
+  String get speedLimitHint => '0 = unlimited';
+
+  @override
+  String get speedLimitDescription =>
+      'Limit overall download speed (0 = no limit). Applied per-worker.';
+
+  @override
+  String get proxySettings => 'Proxy Configuration';
+
+  @override
+  String get enableProxy => 'Enable Proxy';
+
+  @override
+  String get proxyType => 'Type';
+
+  @override
+  String get proxyHost => 'Host';
+
+  @override
+  String get proxyPort => 'Port';
+
+  @override
+  String get proxyUsername => 'Username';
+
+  @override
+  String get proxyPassword => 'Password';
+
+  @override
+  String get optional => 'Optional';
+
+  @override
+  String get customUserAgent => 'Custom User-Agent';
+
+  @override
+  String get userAgentHint => 'Leave empty for default';
+
+  @override
+  String get userAgentDescription =>
+      'Override the User-Agent header sent with download requests.';
+
+  @override
+  String get speedGraph => 'Speed Graph';
+
+  @override
+  String get speedGraphDescription =>
+      'Show speed history graph overlay on download cards.';
 }

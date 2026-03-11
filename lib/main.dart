@@ -378,7 +378,7 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
     );
   }
 
-  Widget _buildStepDots(ThemeData theme) {
+  Widget _buildStepProgress(ThemeData theme) {
     if (_stepSequence.length <= 1) return const SizedBox.shrink();
     final visible = _stepSequence
         .where(
@@ -397,7 +397,7 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
         final active = i == currentIdx;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
+          curve: Curves.easeOutCubic,
           margin: const EdgeInsets.symmetric(horizontal: 3),
           width: active ? 22 : 7,
           height: 7,
@@ -1283,7 +1283,7 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
                         begin: const Offset(0, 0.05),
                         end: Offset.zero,
                       ).animate(CurvedAnimation(
-                          parent: animation, curve: Curves.easeOut));
+                          parent: animation, curve: Curves.easeOutCubic));
                       return FadeTransition(
                         opacity: animation,
                         child: SlideTransition(position: slide, child: child),
@@ -1296,7 +1296,7 @@ class _StartupScreenState extends ConsumerState<StartupScreen> {
                   ),
                   if (_step != _StartupStep.progress) ...[
                     const SizedBox(height: 28),
-                    _buildStepDots(theme),
+                    _buildStepProgress(theme),
                   ],
                 ],
               ),

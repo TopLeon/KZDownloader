@@ -22,6 +22,10 @@ class PlaylistStrategy extends DownloadStrategy {
   /// If non-empty, only download videos at these 0-based indices from the playlist.
   final Set<int> selectedVideoIndices;
 
+  /// Optional per-download overrides (null = use global settings)
+  final String? targetDirOverride;
+  final int? speedLimitBpsOverride;
+
   PlaylistStrategy(
     super.taskId,
     super.db,
@@ -29,6 +33,8 @@ class PlaylistStrategy extends DownloadStrategy {
     this._service, {
     this.overrideParallelDownloads,
     this.selectedVideoIndices = const {},
+    this.targetDirOverride,
+    this.speedLimitBpsOverride,
   });
 
   @override
@@ -52,9 +58,9 @@ class PlaylistStrategy extends DownloadStrategy {
       task.downloadStatus = WorkStatus.running;
       await db.saveTask(task);
 
-      // Resolve target directory
+      // Resolve target directory: per-download override first, then global
       final settings = SettingsService();
-      final userPath = await settings.getDownloadPath();
+      final userPath = targetDirOverride ?? await settings.getDownloadPath();
       final baseDir = userPath ??
           ((await getDownloadsDirectory()) ??
                   await getApplicationDocumentsDirectory())
@@ -82,7 +88,8 @@ class PlaylistStrategy extends DownloadStrategy {
       int completed = 0;
       final settings2 = SettingsService();
       final settingsConcurrency = await settings2.getMaxConcurrentDownloads();
-      final concurrency = (overrideParallelDownloads ?? settingsConcurrency).clamp(1, 8);
+      final concurrency =
+          (overrideParallelDownloads ?? settingsConcurrency).clamp(1, 8);
 
       // Update total so progress bar reflects the actual download count
       task.playlistTotalVideos = videosToDownload.length;
@@ -92,14 +99,17 @@ class PlaylistStrategy extends DownloadStrategy {
           .where((t) => t.playlistParentId == taskId)
           .toList();
 
-      for (int i = 0; i < videosToDownload.length && !_isCancelled; i += concurrency) {
+      for (int i = 0;
+          i < videosToDownload.length && !_isCancelled;
+          i += concurrency) {
         final end = (i + concurrency).clamp(0, videosToDownload.length);
         final batch = videosToDownload.sublist(i, end);
 
         final futures = batch.map((video) async {
           if (_isCancelled) return;
 
-          final videoUrl = video['url'] as String? ?? video['webpage_url'] as String?;
+          final videoUrl =
+              video['url'] as String? ?? video['webpage_url'] as String?;
           if (videoUrl == null) return;
 
           DownloadTask? childTask;
@@ -138,12 +148,17 @@ class PlaylistStrategy extends DownloadStrategy {
 
           try {
             final childId = childTask.id;
-            final childFilename = FileUtils.sanitizeFilename(
-                childTask.title ?? "Video");
+            final childFilename =
+                FileUtils.sanitizeFilename(childTask.title ?? "Video");
 
             final format0 = _resolveFormat(format, isAudio: isAudio);
             final quality0 = _resolveQuality(quality);
             final appTempDir = await getTemporaryDirectory();
+
+            // Resolve speed limit for this child
+            final settings3 = SettingsService();
+            final globalLimit = await settings3.getGlobalSpeedLimitBps();
+            final childSpeedLimit = speedLimitBpsOverride ?? globalLimit;
 
             // Compute expected file path for this child
             final ext = format0.name; // mp4, mkv, mp3, m4a, ogg
@@ -157,6 +172,7 @@ class PlaylistStrategy extends DownloadStrategy {
               quality: quality0,
               tempPath: appTempDir.path,
               customFilename: childFilename,
+              limitRateBps: childSpeedLimit,
             );
 
             _activeProcesses.add(process);
@@ -179,7 +195,8 @@ class PlaylistStrategy extends DownloadStrategy {
 
                   // Update parent container with overall progress
                   updateProgress({
-                    'progress': (completed + runningSum) / videosToDownload.length,
+                    'progress':
+                        (completed + runningSum) / videosToDownload.length,
                     'downloadSpeed': progress['speed'],
                     'childTitle': childTask?.title,
                     'childProgress': childProgress,
@@ -245,8 +262,9 @@ class PlaylistStrategy extends DownloadStrategy {
         final container = await db.getTask(taskId);
         if (container != null) {
           container.playlistCompletedVideos = completed;
-          container.progress =
-              videosToDownload.isNotEmpty ? completed / videosToDownload.length : 0.0;
+          container.progress = videosToDownload.isNotEmpty
+              ? completed / videosToDownload.length
+              : 0.0;
           await db.saveTask(container);
         }
       }

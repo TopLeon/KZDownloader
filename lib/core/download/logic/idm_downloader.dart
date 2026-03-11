@@ -11,16 +11,53 @@ import 'package:flutter/foundation.dart';
 import 'package:rhttp_plus/rhttp_plus.dart';
 import 'package:ffi/ffi.dart';
 
+/// Proxy configuration data object.
+class ProxyConfig {
+  final String host;
+  final int port;
+  final String type; // 'http' or 'socks5'
+  final String? username;
+  final String? password;
+
+  const ProxyConfig({
+    required this.host,
+    required this.port,
+    this.type = 'http',
+    this.username,
+    this.password,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'host': host,
+        'port': port,
+        'type': type,
+        'username': username,
+        'password': password,
+      };
+
+  factory ProxyConfig.fromJson(Map<String, dynamic> json) => ProxyConfig(
+        host: json['host'] as String,
+        port: json['port'] as int,
+        type: json['type'] as String? ?? 'http',
+        username: json['username'] as String?,
+        password: json['password'] as String?,
+      );
+}
+
 // IDM-like multi-threaded downloader with resume, dynamic splitting, and state persistence.
 // Workers run as real Dart isolates for multi-core parallelism.
 // File I/O is serialized through a dedicated writer isolate.
+// Enhanced with advanced network resilience, drift detection, and adaptive retries.
 class IDMDownloader {
   final int maxWorkers;
   final int minChunkSize;
+  final int globalSpeedLimit; // bytes/sec, 0 = unlimited
+  final ProxyConfig? proxyConfig;
   String _currentUrl = "";
   bool _isSaving = false;
 
   final List<_WorkerState> _workers = [];
+  final List<_WorkerState> _pendingWorkers = [];
   final Completer<void> _taskCompleter = Completer<void>();
   Timer? _monitorTimer;
 
@@ -35,9 +72,18 @@ class IDMDownloader {
   int _lastTotalDownloaded = 0;
   DateTime _lastStateSave = DateTime.now();
   static const Duration _stateSaveInterval = Duration(seconds: 5);
+  // ignore: unused_field
   int _supervisorTick = 0;
+  DateTime _lastSplitCheck = DateTime.now();
+  bool _splitDisabled = false;
+  static const int _maxTotalSegments = 64;
 
   late final SpeedTracker _speed;
+  final List<double> _speedHistory = [];
+  static const int _maxSpeedHistorySamples = 60;
+
+  DateTime? _startTime; // for 24h timeout
+  bool _proxyDowngraded = false;
 
   Completer<void>? _cancelCompleter;
   int _pendingCancelCount = 0;
@@ -54,7 +100,25 @@ class IDMDownloader {
     this.maxWorkers = 6,
     this.minChunkSize = 3 * 1024 * 1024,
     this.metaDir,
+    this.globalSpeedLimit = 0,
+    this.proxyConfig,
   });
+
+  /// Calculates the optimal number of workers based on file size.
+  static int calculateOptimalWorkers(int fileSize, int userMaxWorkers) {
+    if (fileSize <= 0) return 1;
+    if (fileSize < 1024 * 1024) return 1;
+    if (fileSize < 50 * 1024 * 1024) return min(4, userMaxWorkers);
+    if (fileSize < 500 * 1024 * 1024) return min(8, userMaxWorkers);
+    return min(16, userMaxWorkers);
+  }
+
+  /// Returns the split check interval based on file size.
+  Duration _splitCheckInterval() {
+    if (_totalFileSize < 100 * 1024 * 1024) return const Duration(seconds: 3);
+    if (_totalFileSize < 1024 * 1024 * 1024) return const Duration(seconds: 5);
+    return const Duration(seconds: 10);
+  }
 
   // Starts the multi-threaded download.
   Future<void> download(
@@ -73,6 +137,9 @@ class IDMDownloader {
     } else {
       _metaPath = "$savePath.meta";
     }
+
+    // Set start time (may be overridden by resume)
+    _startTime = DateTime.now();
 
     try {
       await _spawnWriter();
@@ -106,7 +173,14 @@ class IDMDownloader {
               "Unknown file size - not supported with range splitting.");
         }
 
-        if (!acceptRanges) {
+        if (!acceptRanges || _totalFileSize < 1024 * 1024) {
+          if (!acceptRanges) {
+            debugPrint(
+                "Server does not support Range requests, using single thread");
+          } else {
+            debugPrint("File < 1MB, using single thread");
+          }
+          _splitDisabled = true;
           _workers.add(_WorkerState(
             id: 0,
             startPos: 0,
@@ -116,7 +190,9 @@ class IDMDownloader {
           ));
         } else {
           int effectiveWorkers =
-              min(maxWorkers, _totalFileSize ~/ minChunkSize);
+              calculateOptimalWorkers(_totalFileSize, maxWorkers);
+          effectiveWorkers =
+              min(effectiveWorkers, _totalFileSize ~/ minChunkSize);
           if (effectiveWorkers < 1) effectiveWorkers = 1;
 
           final chunkSize =
@@ -170,7 +246,6 @@ class IDMDownloader {
     }
   }
 
-  // Attempts to recover download state from a persisted meta file.
   Future<bool> _tryRecoverState(String url) async {
     final metaFile = File(_metaPath);
     final dataFile = File(_savePath);
@@ -183,6 +258,11 @@ class IDMDownloader {
 
         _totalFileSize = state['totalSize'];
         _totalDownloaded = state['totalDownloaded'] ?? 0;
+
+        // Recover startTime from meta
+        if (state['startTime'] != null) {
+          _startTime = DateTime.fromMillisecondsSinceEpoch(state['startTime']);
+        }
 
         final workerList = state['workers'] as List<dynamic>;
         _workers.clear();
@@ -225,6 +305,7 @@ class IDMDownloader {
         'totalSize': _totalFileSize,
         'totalDownloaded': _totalDownloaded,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'startTime': _startTime?.millisecondsSinceEpoch,
         'workers': _workers
             .map((w) => {
                   'id': w.id,
@@ -251,7 +332,6 @@ class IDMDownloader {
     }
   }
 
-  // Spawns a worker isolate for one byte-range segment.
   Future<void> _spawnWorker(
     _WorkerState w,
     String url,
@@ -288,6 +368,11 @@ class IDMDownloader {
               _cancelCompleter!.complete();
             }
             break;
+          case 'proxy_downgrade':
+            _proxyDowngraded = true;
+            debugPrint(
+                'Worker ${w.id} downgraded from proxy to direct connection');
+            break;
           case 'error':
             if (!_statusController.isClosed) {
               _statusController
@@ -299,6 +384,7 @@ class IDMDownloader {
       }
     });
 
+    final activeCount = _workers.where((x) => !x.isDone).length;
     w.isolate = await Isolate.spawn(
       _workerIsolateEntryPoint,
       _WorkerIsolateInitData(
@@ -310,6 +396,9 @@ class IDMDownloader {
         currentPos: w.currentPos,
         endPos: w.endPos,
         writerPort: writerPort,
+        globalSpeedLimit: globalSpeedLimit,
+        activeWorkerCount: max(1, activeCount),
+        proxyConfig: proxyConfig,
       ),
     );
 
@@ -321,7 +410,6 @@ class IDMDownloader {
     );
   }
 
-  // Worker isolate entry point — runs on a separate thread.
   static void _workerIsolateEntryPoint(_WorkerIsolateInitData init) async {
     await Rhttp.init();
 
@@ -334,6 +422,7 @@ class IDMDownloader {
 
     bool cancelled = false;
     bool isUnknownSize = (endPos == -1);
+    bool useProxy = init.proxyConfig != null;
 
     StreamSubscription<Uint8List>? activeHttpSub;
     StreamController<Uint8List>? activeStreamController;
@@ -360,8 +449,13 @@ class IDMDownloader {
     });
 
     int retryCount = 0;
-    const int maxRetries = 20;
+    const int maxRetries = 50;
     final random = Random();
+
+    // Speed throttle state
+    final workerSpeedLimit = init.globalSpeedLimit > 0
+        ? (init.globalSpeedLimit / max(1, init.activeWorkerCount))
+        : 0.0;
 
     try {
       while (!cancelled && (isUnknownSize || currentPos <= endPos)) {
@@ -371,6 +465,7 @@ class IDMDownloader {
             currentPos,
             isUnknownSize ? -1 : endPos,
             init.headers,
+            proxy: useProxy ? init.proxyConfig : null,
           );
 
           final controller = StreamController<Uint8List>();
@@ -386,7 +481,6 @@ class IDMDownloader {
           const int batchSize = 2 * 1024 * 1024;
           int localBytes = 0;
 
-          // Backpressure: create a port to receive writer acks
           final ackPort = ReceivePort();
           final ackSendPort = ackPort.sendPort;
           final ackIterator = StreamIterator(ackPort);
@@ -394,21 +488,54 @@ class IDMDownloader {
           DateTime lastProgressUpdate = DateTime.now();
           const progressInterval = Duration(milliseconds: 200);
 
+          // Throttle tracking
+          final throttleStopwatch = Stopwatch()..start();
+          int throttleBatchBytes = 0;
+
           await for (final chunk in controller.stream) {
             if (cancelled) break;
             if (retryCount > 0) retryCount = 0;
             if (!isUnknownSize && currentPos > endPos) break;
 
             Uint8List data = chunk;
+
             if (!isUnknownSize) {
               final limit = endPos - currentPos + 1;
-              if (chunk.length > limit) data = chunk.sublist(0, limit);
+              if (chunk.length > limit) {
+                data = chunk.sublist(0, limit);
+              }
             }
 
             if (data.isNotEmpty) {
               buffer.add(data);
               currentPos += data.length;
               localBytes += data.length;
+              throttleBatchBytes += data.length;
+
+              // Speed throttle enforcement
+              if (workerSpeedLimit > 0) {
+                final elapsedSec =
+                    throttleStopwatch.elapsedMilliseconds / 1000.0;
+                if (elapsedSec > 0) {
+                  final currentRate = throttleBatchBytes / elapsedSec;
+                  if (currentRate > workerSpeedLimit) {
+                    final expectedTime = throttleBatchBytes / workerSpeedLimit;
+                    final delayMs =
+                        ((expectedTime - elapsedSec) * 1000).toInt();
+                    if (delayMs > 0) {
+                      await Future.delayed(Duration(milliseconds: delayMs));
+                    }
+                    // Reset batch tracking
+                    throttleStopwatch.reset();
+                    throttleBatchBytes = 0;
+                  }
+                }
+                // Reset every 2 seconds to avoid drift
+                if (throttleStopwatch.elapsedMilliseconds > 2000) {
+                  throttleStopwatch.reset();
+                  throttleBatchBytes = 0;
+                }
+              }
 
               final now = DateTime.now();
               if (!cancelled &&
@@ -465,15 +592,41 @@ class IDMDownloader {
         } catch (e) {
           if (cancelled) break;
 
-          final err = e.toString();
-          if (err.contains("403") || err.contains("Forbidden")) {
+          final err = e.toString().toLowerCase();
+
+          // Manages critical errors
+          if (err.contains("403") || err.contains("forbidden")) {
             mainPort
                 .send({'type': 'error', 'message': "Link Expired (403): $e"});
             return;
           }
+          if (err.contains("416") || err.contains("range not satisfiable")) {
+            mainPort.send({
+              'type': 'error',
+              'message': "Range Not Satisfiable (416): $e"
+            });
+            return;
+          }
+
+          // Proxy fallback on 502, 503, 504, 407
+          if (useProxy &&
+              (err.contains("502") ||
+                  err.contains("503") ||
+                  err.contains("504") ||
+                  err.contains("407"))) {
+            useProxy = false;
+            mainPort.send({
+              'type': 'proxy_downgrade',
+              'workerId': init.workerId,
+              'error': e.toString()
+            });
+            debugPrint(
+                'Worker ${init.workerId}: Proxy error, falling back to direct connection');
+            continue; // Retry without proxy
+          }
 
           retryCount++;
-          if (retryCount > maxRetries) {
+          if (retryCount >= maxRetries) {
             mainPort.send({
               'type': 'error',
               'message': "Worker ${init.workerId} max retries exceeded: $e"
@@ -481,14 +634,23 @@ class IDMDownloader {
             return;
           }
 
-          final is429 =
-              err.contains("429") || err.contains("Too Many Requests");
-          final wait = is429
-              ? 10 + random.nextInt(10)
-              : min(30, pow(2, retryCount).toInt()) + random.nextInt(3);
-          debugPrint(
-              "Worker ${init.workerId} retry $retryCount/$maxRetries, waiting ${wait}s: $e");
-          await Future.delayed(Duration(seconds: wait));
+          int delayMs;
+          if (err.contains("429") || err.contains("too many requests")) {
+            delayMs = (10 + random.nextInt(10)) *
+                1000; // 10-20 seconds per Rate Limit
+          } else if (retryCount <= 10) {
+            delayMs = 20 + (retryCount * 10); // 20-120ms
+          } else if (retryCount <= 30) {
+            delayMs = 200 + (retryCount * 20); // 200-800ms
+          } else {
+            delayMs = 1500 + random.nextInt(1000); // Up to 2.5s
+          }
+
+          if (retryCount % 10 == 1) {
+            debugPrint(
+                "Worker ${init.workerId} retry $retryCount/$maxRetries: $e");
+          }
+          await Future.delayed(Duration(milliseconds: delayMs));
         }
       }
 
@@ -517,9 +679,6 @@ class IDMDownloader {
     }
   }
 
-  // Ack-based buffer transfer to the writer isolate.
-  // Waits for the writer to acknowledge the write before returning,
-  // providing backpressure to prevent memory accumulation.
   static Future<void> _flushBufferToWriter(
       SendPort writerPort,
       Uint8List buffer,
@@ -532,7 +691,6 @@ class IDMDownloader {
       'data': TransferableTypedData.fromList([buffer]),
       'ackPort': ackSendPort,
     });
-    // Wait for writer to confirm the write is complete
     await ackIterator.moveNext();
   }
 
@@ -543,7 +701,6 @@ class IDMDownloader {
     _writerPortCompleter.complete(_writerSendPort);
   }
 
-  // Writer isolate — serializes all disk I/O via await-for.
   static void _writerEntryPoint(SendPort mainSendPort) async {
     final rp = ReceivePort();
     mainSendPort.send(rp.sendPort);
@@ -589,7 +746,6 @@ class IDMDownloader {
               debugPrint('Writer: error at offset $offset: $e');
             }
           }
-          // Send ack back to worker for backpressure
           ackPort?.send('ack');
         } else if (cmd == 'close') {
           if (raf != null) {
@@ -609,7 +765,6 @@ class IDMDownloader {
     }
   }
 
-  // Windows: mark file as sparse to avoid writing zeros on pre-allocation.
   static void _setSparseFileWindows(String path) {
     if (!Platform.isWindows) return;
 
@@ -672,8 +827,40 @@ class IDMDownloader {
     _speed.start(initialBytes: _totalDownloaded);
     _sendStatusUpdate();
 
+    _lastSplitCheck = DateTime.now();
+
     _monitorTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       _supervisorTick++;
+
+      // 24h timeout check
+      if (_startTime != null &&
+          DateTime.now().difference(_startTime!).inHours >= 24) {
+        debugPrint('Download exceeded 24h timeout, stopping.');
+        if (!_statusController.isClosed) {
+          _statusController.add({
+            'status': 'timeout',
+            'message': 'Download exceeded 24 hour limit'
+          });
+        }
+        pause();
+        return;
+      }
+
+      // Drift Detection
+      final realTotalDownloaded = _workers.fold<int>(
+          0, (sum, w) => sum + max(0, w.currentPos - w.startPos));
+
+      final driftThreshold = max(256 * 1024, (_totalFileSize * 0.001).toInt());
+      if ((_totalDownloaded - realTotalDownloaded).abs() > driftThreshold) {
+        debugPrint(
+            'Progress drift detected: $_totalDownloaded vs $realTotalDownloaded, calibrating');
+        _totalDownloaded = realTotalDownloaded;
+      }
+
+      // Clamp
+      if (_totalFileSize > 0 && _totalDownloaded > _totalFileSize) {
+        _totalDownloaded = _totalFileSize;
+      }
 
       _lastTotalDownloaded = _totalDownloaded;
 
@@ -681,7 +868,12 @@ class IDMDownloader {
       final remaining = _totalFileSize - _totalDownloaded;
       final eta = _speed.formatEta(remaining);
 
-      // Throttle state persistence
+      // Track speed history (last 60 samples)
+      _speedHistory.add(displaySpeed);
+      if (_speedHistory.length > _maxSpeedHistorySamples) {
+        _speedHistory.removeAt(0);
+      }
+
       final now = DateTime.now();
       if (now.difference(_lastStateSave) >= _stateSaveInterval) {
         _lastStateSave = now;
@@ -690,14 +882,18 @@ class IDMDownloader {
 
       _sendStatusUpdate(displaySpeed, eta);
 
-      // Dynamic splitting every ~2s
-      if (_supervisorTick % 4 == 0) {
+      // Spawn pending workers up to concurrency limit
+      _drainPendingWorkers(url, headers, writerPort);
+
+      // Adaptive split check interval based on file size
+      if (!_splitDisabled &&
+          now.difference(_lastSplitCheck) >= _splitCheckInterval()) {
+        _lastSplitCheck = now;
         _checkAndSplit(url, headers, writerPort);
       }
     });
   }
 
-  // Emits current download status to the stream.
   void _sendStatusUpdate([double? speed, String? eta]) {
     if (_statusController.isClosed) return;
 
@@ -728,7 +924,28 @@ class IDMDownloader {
       'activeWorkers': _workers.where((w) => !w.isDone).length,
       'totalWorkers': _workers.length,
       'workers': workersInfo,
+      'speedHistory': List<double>.from(_speedHistory),
+      'proxyActive': proxyConfig != null && !_proxyDowngraded,
     });
+  }
+
+  /// Drains the pending worker queue, spawning workers up to the concurrency limit.
+  void _drainPendingWorkers(
+    String url,
+    Map<String, String> headers,
+    SendPort writerPort,
+  ) {
+    if (_pendingWorkers.isEmpty) return;
+
+    final maxConcurrent = calculateOptimalWorkers(_totalFileSize, maxWorkers);
+    int activeIsolates =
+        _workers.where((w) => !w.isDone && !_pendingWorkers.contains(w)).length;
+
+    while (_pendingWorkers.isNotEmpty && activeIsolates < maxConcurrent) {
+      final worker = _pendingWorkers.removeAt(0);
+      _spawnWorker(worker, url, headers, writerPort);
+      activeIsolates++;
+    }
   }
 
   void _checkAndSplit(
@@ -736,36 +953,42 @@ class IDMDownloader {
     Map<String, String> headers,
     SendPort writerPort,
   ) {
-    int active = _workers.where((w) => !w.isDone).length;
-    if (active >= maxWorkers) return;
+    if (_splitDisabled) return;
+    if (_workers.length >= _maxTotalSegments) return;
 
-    _WorkerState? slowest;
-    int maxRemaining = 0;
-    for (var w in _workers) {
-      if (w.isDone) continue;
-      final rem = w.endPos - w.currentPos;
-      if (rem > maxRemaining) {
-        maxRemaining = rem;
-        slowest = w;
-      }
-    }
+    final activeWorkers = _workers.where((w) => !w.isDone).toList();
+    if (activeWorkers.length <= 1) return;
 
-    if (slowest != null &&
-        maxRemaining > minChunkSize * 2 &&
-        _workers.length < maxWorkers * 2) {
-      final newEnd = slowest.currentPos + (maxRemaining ~/ 2);
-      final oldEnd = slowest.endPos;
+    // Calculate average remaining bytes across active workers
+    final remainingList =
+        activeWorkers.map((w) => w.endPos - w.currentPos).toList();
+    final avgRemaining =
+        remainingList.fold<int>(0, (s, r) => s + r) / activeWorkers.length;
 
-      if (slowest.workerPort == null) return;
+    const int minSplitThreshold = 5 * 1024 * 1024; // 5 MB
+    final double slowFactor = 1.5;
+
+    for (var w in activeWorkers) {
+      if (_workers.length >= _maxTotalSegments) break;
+
+      final remaining = w.endPos - w.currentPos;
+      if (remaining <= minSplitThreshold) continue;
+      if (remaining <= avgRemaining * slowFactor) continue;
+
+      // This worker is a "slow" segment — split it
+      final newEnd = w.currentPos + (remaining ~/ 2);
+      final oldEnd = w.endPos;
+
+      if (w.workerPort == null) continue;
       try {
-        slowest.workerPort!
+        w.workerPort!
             .send({'cmd': 'updateEnd', 'newEnd': newEnd, 'oldEnd': oldEnd});
       } catch (e) {
-        debugPrint('Failed to send updateEnd to worker ${slowest.id}: $e');
-        return;
+        debugPrint('Failed to send updateEnd to worker ${w.id}: $e');
+        continue;
       }
 
-      slowest.endPos = newEnd;
+      w.endPos = newEnd;
       final newWorker = _WorkerState(
         id: _workers.length,
         startPos: newEnd + 1,
@@ -774,17 +997,18 @@ class IDMDownloader {
         isDone: false,
       );
       _workers.add(newWorker);
-      _spawnWorker(newWorker, url, headers, writerPort);
+      _pendingWorkers.add(newWorker);
     }
   }
 
   void _checkAllDone() {
-    if (_workers.every((w) => w.isDone) && !_taskCompleter.isCompleted) {
+    if (_pendingWorkers.isEmpty &&
+        _workers.every((w) => w.isDone) &&
+        !_taskCompleter.isCompleted) {
       _taskCompleter.complete();
     }
   }
 
-  // Cooperatively pauses all workers and persists state.
   Future<void> pause() async {
     _monitorTimer?.cancel();
 
@@ -901,6 +1125,9 @@ class _WorkerIsolateInitData {
   final int currentPos;
   final int endPos;
   final SendPort writerPort;
+  final int globalSpeedLimit;
+  final int activeWorkerCount;
+  final ProxyConfig? proxyConfig;
 
   _WorkerIsolateInitData({
     required this.workerSendPort,
@@ -911,5 +1138,8 @@ class _WorkerIsolateInitData {
     required this.currentPos,
     required this.endPos,
     required this.writerPort,
+    this.globalSpeedLimit = 0,
+    this.activeWorkerCount = 1,
+    this.proxyConfig,
   });
 }

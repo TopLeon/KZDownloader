@@ -50,6 +50,8 @@ class ChatInputArea extends ConsumerStatefulWidget {
   final ValueChanged<int>? onM3U8VariantIndexChanged;
   final ValueChanged<int>? onParallelDownloadsChanged;
   final ValueChanged<Set<int>>? onSelectedVideoIndicesChanged;
+  final ValueChanged<String?>? onAdvancedDownloadPathChanged;
+  final ValueChanged<int?>? onAdvancedSpeedLimitKbpsChanged;
 
   const ChatInputArea({
     super.key,
@@ -75,30 +77,60 @@ class ChatInputArea extends ConsumerStatefulWidget {
     this.onM3U8VariantIndexChanged,
     this.onParallelDownloadsChanged,
     this.onSelectedVideoIndicesChanged,
+    this.onAdvancedDownloadPathChanged,
+    this.onAdvancedSpeedLimitKbpsChanged,
   });
 
   @override
   ConsumerState<ChatInputArea> createState() => _ChatInputAreaState();
 }
 
-class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
+class _ChatInputAreaState extends ConsumerState<ChatInputArea>
+    with SingleTickerProviderStateMixin {
   bool _isVideoLink = false;
   String _lastPrefetchedUrl = '';
   int _selectedM3U8VariantIndex = 0;
   int _parallelDownloads = 3;
   Set<int> _selectedVideoIndices = {};
+  String? _advancedDownloadPath;
+  int? _advancedSpeedLimitKbps;
+  bool _isFocused = false;
+  FocusNode? _ownFocusNode;
+
+  FocusNode get _activeFocusNode =>
+      widget.focusNode ?? (_ownFocusNode ??= FocusNode());
+
+  // For the send button scale animation
+  late final AnimationController _sendBtnController;
+  late final Animation<double> _sendBtnScale;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onTextChanged);
     _onTextChanged();
+    _activeFocusNode.addListener(_handleFocusChange);
+
+    _sendBtnController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _sendBtnScale = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _sendBtnController, curve: Curves.easeOutBack),
+    );
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onTextChanged);
+    _activeFocusNode.removeListener(_handleFocusChange);
+    _ownFocusNode?.dispose();
+    _sendBtnController.dispose();
     super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (mounted) setState(() => _isFocused = _activeFocusNode.hasFocus);
   }
 
   void _onTextChanged() {
@@ -112,14 +144,11 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
       });
     }
 
-    // Prefetch metadata for all URLs (both generic and video)
     final isUrl = text.startsWith('http://') || text.startsWith('https://');
 
-    // Use post-frame callback to avoid calling setState during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      // Only prefetch if URL has actually changed
       if (_lastPrefetchedUrl == text && isUrl) {
         ref
             .read(prefetchStatusProvider.notifier)
@@ -127,7 +156,6 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
         return;
       }
 
-      // Update _lastPrefetchedUrl BEFORE scheduling callback to prevent duplicates
       if (isUrl) {
         _lastPrefetchedUrl = text;
       } else if (text.isEmpty) {
@@ -138,21 +166,16 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
         ref
             .read(prefetchStatusProvider.notifier)
             .setStatus(PrefetchStatus.loading);
-        // Notify parent that prefetch is starting
         widget.onPrefetchStateChanged?.call(true);
 
         if (UrlUtils.isM3U8Playlist(text)) {
-          // M3U8 playlist - prefetch M3U8 content
           ref.read(downloadListProvider.notifier).prefetchM3U8Metadata(text);
         } else if (!isVideo) {
-          // Generic file - use existing prefetch
           ref.read(downloadListProvider.notifier).prefetchMetadata(text);
         } else {
-          // Video link - prefetch with yt-dlp
           ref.read(downloadListProvider.notifier).prefetchVideoMetadata(text);
         }
       } else if (text.isEmpty) {
-        // URL cleared - reset prefetch status
         widget.onPrefetchStateChanged?.call(false);
         ref
             .read(prefetchStatusProvider.notifier)
@@ -182,7 +205,6 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
         ),
       ];
 
-  // Returns true if the video is a youtube link
   bool _isYouTubeLink(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
@@ -192,11 +214,13 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
         host.contains('youtube-nocookie.com');
   }
 
+  // Compute max workers based on provider: Standard → 1
+  int? get _maxWorkers => widget.selectedProvider == 'Standard' ? 1 : null;
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
-    final isLightTheme = Theme.of(context).brightness == Brightness.light;
 
     final showProviderSelector = !_isVideoLink &&
         (widget.controller.text.startsWith('http://') ||
@@ -208,13 +232,20 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
         (widget.summarizeOnly && widget.controller.text.isNotEmpty) ||
         (isGeneric && widget.controller.text.isNotEmpty);
 
-    // Watch prefetch status and data from providers
     final prefetchStatus = ref.watch(prefetchStatusProvider);
     final prefetchedMap = ref.watch(prefetchedMetadataProvider);
     final currentUrl = widget.controller.text;
     final prefetchedData = prefetchedMap[currentUrl];
 
-    // Listen for prefetch status changes to notify parent
+    // Drive the send button scale animation
+    final shouldShowSend =
+        prefetchStatus == PrefetchStatus.ready && currentUrl.isNotEmpty;
+    if (shouldShowSend) {
+      _sendBtnController.forward();
+    } else {
+      _sendBtnController.reverse();
+    }
+
     ref.listen(prefetchStatusProvider, (prev, next) {
       if (next == PrefetchStatus.loading) {
         widget.onPrefetchStateChanged?.call(true);
@@ -226,22 +257,26 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
       }
     });
 
-    Widget inputArea = Container(
+    Widget inputArea = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
       width: widget.isCentered ? 600 : null,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.tertiary,
         borderRadius: BorderRadius.circular(30),
         border: Border.all(
-          color: colorScheme.primary.withOpacity(0.15),
+          color: _isFocused ? colorScheme.primary.withOpacity(0.2) : colorScheme.primary.withOpacity(0.15),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.05),
+            color: _isFocused
+                ? colorScheme.shadow.withOpacity(0.10)
+                : colorScheme.shadow.withOpacity(0.05),
             blurRadius: 20,
             offset: const Offset(0, 2),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -251,18 +286,13 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
             children: [
               // Provider Selector
               if (showProviderSelector && !widget.summarizeOnly) ...[
-                _buildProviderSelector(
-                  context,
-                  colorScheme,
-                  isLightTheme,
-                  l10n,
-                ),
+                _buildProviderSelector(context, colorScheme, l10n),
               ] else
                 Padding(
                   padding: const EdgeInsets.only(left: 16.0),
                   child: Icon(
                     Icons.link,
-                    size: 20,
+                    size: 22,
                     color: colorScheme.onSurfaceVariant.withOpacity(0.9),
                   ),
                 ),
@@ -271,7 +301,7 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
               Expanded(
                 child: TextField(
                   controller: widget.controller,
-                  focusNode: widget.focusNode,
+                  focusNode: _activeFocusNode,
                   cursorHeight: 15,
                   style: GoogleFonts.montserrat(fontSize: 15),
                   decoration: InputDecoration(
@@ -292,26 +322,36 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
                 ),
               ),
 
-              // Send Button
-              if (prefetchStatus == PrefetchStatus.ready && currentUrl != '')
-                Container(
+              // Send Button — spring scale animation
+              ScaleTransition(
+                scale: _sendBtnScale,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
                   margin: const EdgeInsets.only(right: 4),
                   decoration: BoxDecoration(
-                    color: colorScheme.primary,
+                    color: shouldShowSend
+                        ? colorScheme.primary
+                        : colorScheme.primary.withOpacity(0.55),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
                     onPressed: widget.onSubmit,
                     icon: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: FIcon(
-                          widget.summarizeOnly
-                              ? RI.RiBardLine
-                              : RI.RiDownloadLine,
-                          color: Theme.of(context).colorScheme.onPrimary,
-                          key: ValueKey(widget.summarizeOnly),
-                          size: 20,
-                        )),
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, anim) => FadeTransition(
+                        opacity: anim,
+                        child: ScaleTransition(scale: anim, child: child),
+                      ),
+                      child: FIcon(
+                        widget.summarizeOnly
+                            ? RI.RiBardLine
+                            : RI.RiDownloadLine,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        key: ValueKey(widget.summarizeOnly),
+                        size: 20,
+                      ),
+                    ),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       padding: const EdgeInsets.all(10),
@@ -319,66 +359,78 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
                     ),
                   ),
                 ),
+              ),
             ],
           ),
 
-          // Video Options Panel
-          if (prefetchStatus == PrefetchStatus.loading) ...[
-            Divider(
-              height: 1,
-              color: colorScheme.outlineVariant.withOpacity(0.5),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.auto_awesome,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(
-                    width: 8,
-                  ),
-                  Text(l10n.downloadingMetadata)
-                ],
-              ),
-            )
-          ] else if (showVideoOptionsPanel &&
-              prefetchStatus == PrefetchStatus.ready)
-            InputOptionsPanel(
-              showVideoOptions: widget.showVideoOptions,
-              selectedQuality: widget.selectedQuality,
-              isAudio: widget.isAudio,
-              summarizeOnly: widget.summarizeOnly,
-              onQualityChanged: widget.onQualityChanged,
-              onIsAudioChanged: widget.onIsAudioChanged,
-              onSummarizeOnlyChanged: widget.onSummarizeOnlyChanged,
-              l10n: l10n,
-              isGeneric: isGeneric,
-              expectedChecksum: widget.expectedChecksum,
-              checksumAlgorithm: widget.checksumAlgorithm,
-              onChecksumChanged: widget.onChecksumChanged,
-              onAlgorithmChanged: widget.onAlgorithmChanged,
-              prefetchedData: prefetchedData,
-              selectedM3U8VariantIndex: _selectedM3U8VariantIndex,
-              onM3U8VariantChanged: (idx) {
-                setState(() => _selectedM3U8VariantIndex = idx);
-                widget.onM3U8VariantIndexChanged?.call(idx);
-              },
-              isPlaylistUrl: UrlUtils.isYouTubePlaylist(widget.controller.text),
-              parallelDownloads: _parallelDownloads,
-              onParallelDownloadsChanged: (val) {
-                setState(() => _parallelDownloads = val);
-                widget.onParallelDownloadsChanged?.call(val);
-              },
-              selectedVideoIndices: _selectedVideoIndices,
-              onSelectedVideoIndicesChanged: (indices) {
-                setState(() => _selectedVideoIndices = indices);
-                widget.onSelectedVideoIndicesChanged?.call(indices);
-              },
-            ),
+          // Loading shimmer / options panel
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SizeTransition(
+                  sizeFactor: animation,
+                  axisAlignment: -1,
+                  child: child,
+                ),
+              );
+            },
+            child: prefetchStatus == PrefetchStatus.loading
+                ? _buildLoadingRow(colorScheme, l10n,
+                    key: const ValueKey('loading'))
+                : (showVideoOptionsPanel &&
+                        prefetchStatus == PrefetchStatus.ready)
+                    ? InputOptionsPanel(
+                        key: const ValueKey('options'),
+                        showVideoOptions: widget.showVideoOptions,
+                        selectedQuality: widget.selectedQuality,
+                        isAudio: widget.isAudio,
+                        summarizeOnly: widget.summarizeOnly,
+                        onQualityChanged: widget.onQualityChanged,
+                        onIsAudioChanged: widget.onIsAudioChanged,
+                        onSummarizeOnlyChanged: widget.onSummarizeOnlyChanged,
+                        l10n: l10n,
+                        isGeneric: isGeneric,
+                        expectedChecksum: widget.expectedChecksum,
+                        checksumAlgorithm: widget.checksumAlgorithm,
+                        onChecksumChanged: widget.onChecksumChanged,
+                        onAlgorithmChanged: widget.onAlgorithmChanged,
+                        prefetchedData: prefetchedData,
+                        selectedM3U8VariantIndex: _selectedM3U8VariantIndex,
+                        onM3U8VariantChanged: (idx) {
+                          setState(() => _selectedM3U8VariantIndex = idx);
+                          widget.onM3U8VariantIndexChanged?.call(idx);
+                        },
+                        isPlaylistUrl:
+                            UrlUtils.isYouTubePlaylist(widget.controller.text),
+                        parallelDownloads: _parallelDownloads,
+                        onParallelDownloadsChanged: (val) {
+                          setState(() => _parallelDownloads = val);
+                          widget.onParallelDownloadsChanged?.call(val);
+                        },
+                        selectedVideoIndices: _selectedVideoIndices,
+                        onSelectedVideoIndicesChanged: (indices) {
+                          setState(() => _selectedVideoIndices = indices);
+                          widget.onSelectedVideoIndicesChanged?.call(indices);
+                        },
+                        advancedDownloadPath: _advancedDownloadPath,
+                        onAdvancedDownloadPathChanged: (path) {
+                          setState(() => _advancedDownloadPath = path);
+                          widget.onAdvancedDownloadPathChanged?.call(path);
+                        },
+                        advancedSpeedLimitKbps: _advancedSpeedLimitKbps,
+                        onAdvancedSpeedLimitKbpsChanged: (kbps) {
+                          setState(() => _advancedSpeedLimitKbps = kbps);
+                          widget.onAdvancedSpeedLimitKbpsChanged?.call(kbps);
+                        },
+                        maxWorkers: _maxWorkers,
+                      )
+                    : const SizedBox.shrink(key: ValueKey('empty')),
+          ),
+
           if (widget.summarizeOnly)
             Padding(
               padding: const EdgeInsets.only(bottom: 20, left: 12, right: 12),
@@ -396,65 +448,14 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Mode Selector (Download / Summary)
+        // Mode Selector (Download / Summary) — Claude-style animated tab
         if (widget.isCentered &&
             widget.showVideoOptions &&
             _isYouTubeLink(widget.controller.text) &&
             !UrlUtils.isYouTubePlaylist(widget.controller.text))
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: colorScheme.tertiary,
-                border: Border.all(
-                  color: colorScheme.primary.withOpacity(0.15),
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: IntrinsicWidth(
-                child: Stack(
-                  children: [
-                    // Animated background indicator
-                    AnimatedAlign(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeInOut,
-                      alignment: widget.summarizeOnly
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: 0.5,
-                        child: Container(
-                          height: 32,
-                          margin: const EdgeInsets.symmetric(horizontal: 0),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Tabs
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _ModeTab(
-                          label: l10n.modeDownload,
-                          isSelected: !widget.summarizeOnly,
-                          onTap: () => widget.onSummarizeOnlyChanged(false),
-                        ),
-                        _ModeTab(
-                          label: l10n.modeSummary,
-                          isSelected: widget.summarizeOnly,
-                          onTap: () => widget.onSummarizeOnlyChanged(true),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            child: _buildModeSelector(colorScheme, l10n),
           ),
 
         if (prefetchStatus == PrefetchStatus.loading ||
@@ -475,10 +476,101 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
     );
   }
 
+  // ── Mode selector (Download / Summary) — Claude-inspired pill ────────────
+
+  Widget _buildModeSelector(ColorScheme cs, AppLocalizations l10n) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: cs.tertiary,
+        border: Border.all(color: cs.primary.withOpacity(0.15)),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: IntrinsicWidth(
+        child: Stack(
+          children: [
+            // Animated sliding pill background
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              alignment: widget.summarizeOnly
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: 0.5,
+                child: Container(
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: cs.primary.withOpacity(0.25),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Tabs
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ModeTab(
+                  label: l10n.modeDownload,
+                  isSelected: !widget.summarizeOnly,
+                  onTap: () => widget.onSummarizeOnlyChanged(false),
+                ),
+                _ModeTab(
+                  label: l10n.modeSummary,
+                  isSelected: widget.summarizeOnly,
+                  onTap: () => widget.onSummarizeOnlyChanged(true),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Loading row ───────────────────────────────────────────────────────────
+
+  Widget _buildLoadingRow(ColorScheme cs, AppLocalizations l10n, {Key? key}) {
+    return Column(
+      key: key,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Divider(height: 1, color: cs.outlineVariant.withOpacity(0.4)),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _ThreeDotsLoader(color: cs.primary),
+              const SizedBox(width: 10),
+              Text(
+                l10n.downloadingMetadata,
+                style: GoogleFonts.montserrat(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Provider selector ─────────────────────────────────────────────────────
+
   Widget _buildProviderSelector(
     BuildContext context,
     ColorScheme colorScheme,
-    bool isLightTheme,
     AppLocalizations l10n,
   ) {
     return Container(
@@ -546,6 +638,8 @@ class _ChatInputAreaState extends ConsumerState<ChatInputArea> {
   }
 }
 
+// ── Mode tab ──────────────────────────────────────────────────────────────────
+
 class _ModeTab extends StatelessWidget {
   final String label;
   final bool isSelected;
@@ -567,13 +661,83 @@ class _ModeTab extends StatelessWidget {
         color: Colors.transparent,
         child: Center(
           child: AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
             style: GoogleFonts.montserrat(
               color: isSelected ? colorScheme.onPrimary : colorScheme.onSurface,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               fontSize: 13,
             ),
             child: Text(label),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Three staggered pulsing dots (loading indicator) ─────────────────────────
+
+class _ThreeDotsLoader extends StatefulWidget {
+  final Color color;
+  const _ThreeDotsLoader({required this.color});
+
+  @override
+  State<_ThreeDotsLoader> createState() => _ThreeDotsLoaderState();
+}
+
+class _ThreeDotsLoaderState extends State<_ThreeDotsLoader>
+    with TickerProviderStateMixin {
+  late final List<AnimationController> _controllers;
+  late final List<Animation<double>> _anims;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = List.generate(
+      3,
+      (i) => AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 600),
+      ),
+    );
+    _anims = _controllers
+        .map((c) => Tween<double>(begin: 0.25, end: 1.0)
+            .animate(CurvedAnimation(parent: c, curve: Curves.easeInOut)))
+        .toList();
+    for (int i = 0; i < 3; i++) {
+      Future.delayed(Duration(milliseconds: i * 180), () {
+        if (mounted) _controllers[i].repeat(reverse: true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(
+        3,
+        (i) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: FadeTransition(
+            opacity: _anims[i],
+            child: Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: widget.color,
+                shape: BoxShape.circle,
+              ),
+            ),
           ),
         ),
       ),

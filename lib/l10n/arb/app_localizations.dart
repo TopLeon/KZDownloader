@@ -2755,6 +2755,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Autoplay'**
   String get autoplay;
+
+  /// No description provided for @advancedOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced Options'**
+  String get advancedOptions;
+
+  /// No description provided for @globalSpeedLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Global Speed Limit'**
+  String get globalSpeedLimit;
+
+  /// No description provided for @speedLimitHint.
+  ///
+  /// In en, this message translates to:
+  /// **'0 = unlimited'**
+  String get speedLimitHint;
+
+  /// No description provided for @speedLimitDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Limit overall download speed (0 = no limit). Applied per-worker.'**
+  String get speedLimitDescription;
+
+  /// No description provided for @proxySettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy Configuration'**
+  String get proxySettings;
+
+  /// No description provided for @enableProxy.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Proxy'**
+  String get enableProxy;
+
+  /// No description provided for @proxyType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get proxyType;
+
+  /// No description provided for @proxyHost.
+  ///
+  /// In en, this message translates to:
+  /// **'Host'**
+  String get proxyHost;
+
+  /// No description provided for @proxyPort.
+  ///
+  /// In en, this message translates to:
+  /// **'Port'**
+  String get proxyPort;
+
+  /// No description provided for @proxyUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get proxyUsername;
+
+  /// No description provided for @proxyPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get proxyPassword;
+
+  /// No description provided for @optional.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional'**
+  String get optional;
+
+  /// No description provided for @customUserAgent.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom User-Agent'**
+  String get customUserAgent;
+
+  /// No description provided for @userAgentHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty for default'**
+  String get userAgentHint;
+
+  /// No description provided for @userAgentDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Override the User-Agent header sent with download requests.'**
+  String get userAgentDescription;
+
+  /// No description provided for @speedGraph.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed Graph'**
+  String get speedGraph;
+
+  /// No description provided for @speedGraphDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Show speed history graph overlay on download cards.'**
+  String get speedGraphDescription;
 }
 
 class _AppLocalizationsDelegate

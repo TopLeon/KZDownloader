@@ -39,6 +39,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
   int? _selectedM3U8VariantIndex;
   int _parallelDownloads = 3;
   Set<int> _selectedVideoIndices = {};
+  String? _advancedDownloadPath;
+  int? _advancedSpeedLimitKbps;
 
   String _searchQuery = '';
   SortOption _selectedSortOption = SortOption.recent;
@@ -172,9 +174,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
           expectedChecksum: _expectedChecksum,
           checksumAlgorithm: _checksumAlgorithm,
           selectedM3U8VariantIndex: _selectedM3U8VariantIndex,
-          parallelDownloads: _parallelDownloads != 3 ? _parallelDownloads : null,
+          parallelDownloads:
+              _parallelDownloads != 3 ? _parallelDownloads : null,
           selectedVideoIndices:
               _selectedVideoIndices.isNotEmpty ? _selectedVideoIndices : null,
+          maxWorkers: provider == 'Standard' ? 1 : null,
+          advancedDownloadPath: _advancedDownloadPath,
+          advancedSpeedLimitBps:
+              _advancedSpeedLimitKbps != null && _advancedSpeedLimitKbps! > 0
+                  ? _advancedSpeedLimitKbps! * 1024
+                  : null,
         ))!;
 
     ref.read(selectedCategoryProvider.notifier).setCategory(newTask.category);
@@ -423,9 +432,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
                       child: Column(
                         children: [
                           Expanded(
-                            child: Container(
-                              color: Colors.transparent,
-                              child: _buildBodyContent(selectedCategory),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 280),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                  child: SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0, 0.02),
+                                      end: Offset.zero,
+                                    ).animate(CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic,
+                                    )),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: KeyedSubtree(
+                                key: ValueKey(selectedCategory),
+                                child: Container(
+                                  color: Colors.transparent,
+                                  child: _buildBodyContent(selectedCategory),
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -488,6 +523,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with WindowListener {
             setState(() => _parallelDownloads = val),
         onSelectedVideoIndicesChanged: (indices) =>
             setState(() => _selectedVideoIndices = indices),
+        onAdvancedDownloadPathChanged: (path) =>
+            setState(() => _advancedDownloadPath = path),
+        onAdvancedSpeedLimitKbpsChanged: (kbps) =>
+            setState(() => _advancedSpeedLimitKbps = kbps),
       );
     } else if (selectedCategory == TaskCategory.music) {
       return MusicScreen(

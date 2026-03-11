@@ -24,7 +24,14 @@ class M3U8Strategy extends DownloadStrategy {
   /// If null, picks the first (best quality) variant.
   final int? selectedVariantIndex;
 
-  M3U8Strategy(super.taskId, super.db, super.ref, {this.selectedVariantIndex});
+  /// Optional per-download overrides (null = use global settings)
+  final String? targetDirOverride;
+  final int? speedLimitBpsOverride;
+
+  M3U8Strategy(super.taskId, super.db, super.ref,
+      {this.selectedVariantIndex,
+      this.targetDirOverride,
+      this.speedLimitBpsOverride});
 
   @override
   Future<void> start(
@@ -103,7 +110,7 @@ class M3U8Strategy extends DownloadStrategy {
 
       // 5. Resolve target directory and output file
       final settings = SettingsService();
-      final userPath = await settings.getDownloadPath();
+      final userPath = targetDirOverride ?? await settings.getDownloadPath();
       final baseDir = userPath ??
           ((await getDownloadsDirectory()) ??
                   await getApplicationDocumentsDirectory())
@@ -136,7 +143,8 @@ class M3U8Strategy extends DownloadStrategy {
         if (keyHttpResponse.statusCode == 200) {
           encryptionKey = keyHttpResponse.bodyBytes;
         } else {
-          debugPrint('[M3U8] Warning: Failed to fetch encryption key: HTTP ${keyHttpResponse.statusCode}');
+          debugPrint(
+              '[M3U8] Warning: Failed to fetch encryption key: HTTP ${keyHttpResponse.statusCode}');
         }
 
         if (result.encryption!.iv != null) {
@@ -159,6 +167,10 @@ class M3U8Strategy extends DownloadStrategy {
       final outputFile = File(outputPath);
       final sink = outputFile.openWrite(mode: mode);
 
+      // Read speed limit: per-download override takes precedence over global
+      final globalSpeedLimit = await settings.getGlobalSpeedLimitBps();
+      final speedLimitBps = speedLimitBpsOverride ?? globalSpeedLimit;
+
       final totalSegments = result.segments.length;
 
       try {
@@ -166,14 +178,28 @@ class M3U8Strategy extends DownloadStrategy {
           final segment = result.segments[i];
           final segmentUrl = M3U8Utils.resolveUrl(currentBaseUrl, segment.url);
 
-          // Download segment
+          // Download segment with optional throttle
+          final sw = Stopwatch()..start();
           final segResponse = await stdhttp.get(Uri.parse(segmentUrl));
+          sw.stop();
+
           if (segResponse.statusCode != 200) {
-            debugPrint('[M3U8] Segment $i failed: HTTP ${segResponse.statusCode}');
+            debugPrint(
+                '[M3U8] Segment $i failed: HTTP ${segResponse.statusCode}');
             continue;
           }
 
           Uint8List segmentData = segResponse.bodyBytes;
+
+          // Throttle: if speed limit is set, delay proportionally
+          if (speedLimitBps > 0) {
+            final elapsedMs = sw.elapsedMilliseconds.clamp(1, 999999999);
+            final expectedMs = (segmentData.length * 1000) ~/ speedLimitBps;
+            if (expectedMs > elapsedMs) {
+              await Future.delayed(
+                  Duration(milliseconds: expectedMs - elapsedMs));
+            }
+          }
 
           // Decrypt if needed
           if (encryptionKey != null && result.encryption?.method == 'AES-128') {

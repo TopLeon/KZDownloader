@@ -17,7 +17,12 @@ class YtDlpStrategy extends DownloadStrategy {
   StreamSubscription? _stderrSub;
   late DateTime _startedAt;
 
-  YtDlpStrategy(super.taskId, super.db, super.ref, this._service);
+  /// Optional per-download overrides (null = use global settings)
+  final String? targetDirOverride;
+  final int? speedLimitBpsOverride;
+
+  YtDlpStrategy(super.taskId, super.db, super.ref, this._service,
+      {this.targetDirOverride, this.speedLimitBpsOverride});
 
   @override
   Future<void> start(
@@ -29,13 +34,17 @@ class YtDlpStrategy extends DownloadStrategy {
       final task = await db.getTask(taskId);
       if (task == null) throw Exception('Task $taskId not found');
 
-      // Resolve target directory
+      // Resolve target directory: per-download override first, then global
       final settings = SettingsService();
-      final userPath = await settings.getDownloadPath();
+      final userPath = targetDirOverride ?? await settings.getDownloadPath();
       final targetDir = userPath ??
           ((await getDownloadsDirectory()) ??
                   await getApplicationDocumentsDirectory())
               .path;
+
+      // Read speed limit: per-download override first, then global setting
+      final globalLimit = await settings.getGlobalSpeedLimitBps();
+      final speedLimitBps = speedLimitBpsOverride ?? globalLimit;
 
       // Resolve file name
       String? sanitizedFilename;
@@ -68,6 +77,7 @@ class YtDlpStrategy extends DownloadStrategy {
         quality: targetQuality,
         tempPath: appTempDir.path,
         customFilename: sanitizedFilename,
+        limitRateBps: speedLimitBps,
       );
 
       _stdoutSub = _process!.stdout

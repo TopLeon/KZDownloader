@@ -34,6 +34,8 @@ class HomeScreen extends ConsumerWidget {
   final Function(int)? onM3U8VariantIndexChanged;
   final Function(int)? onParallelDownloadsChanged;
   final Function(Set<int>)? onSelectedVideoIndicesChanged;
+  final ValueChanged<String?>? onAdvancedDownloadPathChanged;
+  final ValueChanged<int?>? onAdvancedSpeedLimitKbpsChanged;
 
   const HomeScreen({
     super.key,
@@ -61,6 +63,8 @@ class HomeScreen extends ConsumerWidget {
     this.onM3U8VariantIndexChanged,
     this.onParallelDownloadsChanged,
     this.onSelectedVideoIndicesChanged,
+    this.onAdvancedDownloadPathChanged,
+    this.onAdvancedSpeedLimitKbpsChanged,
   });
 
   @override
@@ -79,7 +83,7 @@ class HomeScreen extends ConsumerWidget {
                   Positioned(
                     bottom: size.height * 0.15,
                     left: size.width * 0.15,
-                    child: _buildGlowBlob(
+                    child: _AnimatedGlowBlob(
                       color: const Color(0xFF3B82F6),
                       isLightTheme: isLightTheme,
                     ),
@@ -87,7 +91,7 @@ class HomeScreen extends ConsumerWidget {
                   Positioned(
                     top: size.height * 0.15,
                     right: size.width * 0.15,
-                    child: _buildGlowBlob(
+                    child: _AnimatedGlowBlob(
                       color: const Color(0xFF06B6D4),
                       isLightTheme: isLightTheme,
                     ),
@@ -102,7 +106,21 @@ class HomeScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   SizedBox(height: MediaQuery.of(context).size.height * 0.32),
-                  Center(child: _buildBrandLogo(isLightTheme, colorScheme)),
+                  Center(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 650),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, child) => Opacity(
+                        opacity: value,
+                        child: Transform.translate(
+                          offset: Offset(0, (1 - value) * 10),
+                          child: child,
+                        ),
+                      ),
+                      child: _buildBrandLogo(isLightTheme, colorScheme),
+                    ),
+                  ),
                   SizedBox(
                       height: MediaQuery.of(context).size.height *
                           (!showVideoOptions ? 0.075 : 0.05)),
@@ -146,6 +164,10 @@ class HomeScreen extends ConsumerWidget {
                                 ? (indices) =>
                                     onSelectedVideoIndicesChanged!(indices)
                                 : null,
+                        onAdvancedDownloadPathChanged:
+                            onAdvancedDownloadPathChanged,
+                        onAdvancedSpeedLimitKbpsChanged:
+                            onAdvancedSpeedLimitKbpsChanged,
                       ),
                     ),
                   ),
@@ -198,22 +220,6 @@ class HomeScreen extends ConsumerWidget {
             )
           ]
         ],
-      ),
-    );
-  }
-
-  Widget _buildGlowBlob({required Color color, required bool isLightTheme}) {
-    final opacity = isLightTheme ? 0.0 : 0.1;
-
-    return ImageFiltered(
-      imageFilter: ui.ImageFilter.blur(sigmaX: 100, sigmaY: 100),
-      child: Container(
-        width: 300,
-        height: 300,
-        decoration: BoxDecoration(
-          color: color.withOpacity(opacity),
-          shape: BoxShape.circle,
-        ),
       ),
     );
   }
@@ -299,7 +305,8 @@ class HomeScreen extends ConsumerWidget {
             position: Tween<Offset>(
               begin: const Offset(0, 0.3),
               end: Offset.zero,
-            ).animate(animation),
+            ).animate(CurvedAnimation(
+                parent: animation, curve: Curves.easeOutCubic)),
             child: child,
           ),
         );
@@ -369,6 +376,73 @@ class HomeScreen extends ConsumerWidget {
                           end: AlignmentGeometry.topCenter)),
                 ))
         ],
+      ),
+    );
+  }
+}
+
+// ── Animated pulsing glow blob ─────────────────────────────────────────────────
+
+class _AnimatedGlowBlob extends StatefulWidget {
+  final Color color;
+  final bool isLightTheme;
+
+  const _AnimatedGlowBlob({required this.color, required this.isLightTheme});
+
+  @override
+  State<_AnimatedGlowBlob> createState() => _AnimatedGlowBlobState();
+}
+
+class _AnimatedGlowBlobState extends State<_AnimatedGlowBlob>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4000),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.07, end: 0.13).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isLightTheme) {
+      return ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(sigmaX: 100, sigmaY: 100),
+        child: Container(
+          width: 300,
+          height: 300,
+          decoration: BoxDecoration(
+            color: widget.color.withOpacity(0.0),
+            shape: BoxShape.circle,
+          ),
+        ),
+      );
+    }
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (context, _) => ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(sigmaX: 100, sigmaY: 100),
+        child: Container(
+          width: 300,
+          height: 300,
+          decoration: BoxDecoration(
+            color: widget.color.withOpacity(_anim.value),
+            shape: BoxShape.circle,
+          ),
+        ),
       ),
     );
   }

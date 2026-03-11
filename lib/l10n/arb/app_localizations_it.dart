@@ -1423,4 +1423,58 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get autoplay => 'Riproduzione Automatica';
+
+  @override
+  String get advancedOptions => 'Opzioni Avanzate';
+
+  @override
+  String get globalSpeedLimit => 'Limite di Velocità Globale';
+
+  @override
+  String get speedLimitHint => '0 = illimitato';
+
+  @override
+  String get speedLimitDescription =>
+      'Limita la velocità complessiva dei download (0 = nessun limite). Applicato per worker.';
+
+  @override
+  String get proxySettings => 'Configurazione Proxy';
+
+  @override
+  String get enableProxy => 'Abilita Proxy';
+
+  @override
+  String get proxyType => 'Tipo';
+
+  @override
+  String get proxyHost => 'Host';
+
+  @override
+  String get proxyPort => 'Porta';
+
+  @override
+  String get proxyUsername => 'Nome utente';
+
+  @override
+  String get proxyPassword => 'Password';
+
+  @override
+  String get optional => 'Opzionale';
+
+  @override
+  String get customUserAgent => 'User-Agent Personalizzato';
+
+  @override
+  String get userAgentHint => 'Lascia vuoto per il default';
+
+  @override
+  String get userAgentDescription =>
+      'Sovrascrive l\'header User-Agent inviato con le richieste di download.';
+
+  @override
+  String get speedGraph => 'Grafico Velocità';
+
+  @override
+  String get speedGraphDescription =>
+      'Mostra il grafico della velocità sulle card di download.';
 }

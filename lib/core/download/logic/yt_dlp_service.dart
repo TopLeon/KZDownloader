@@ -44,8 +44,7 @@ class YtDlpService {
               'youtube_explode did not respond within 10 seconds.'),
         );
 
-    final manifest =
-        await _yt.videos.streamsClient.getManifest(video.id.value);
+    final manifest = await _yt.videos.streamsClient.getManifest(video.id.value);
 
     final formats = <Map<String, dynamic>>[];
 
@@ -193,6 +192,7 @@ class YtDlpService {
     DownloadQuality quality = DownloadQuality.best,
     String? tempPath,
     String? customFilename,
+    int limitRateBps = 0,
   }) async {
     final ytDlpPath = await _binaryManager.getYtDlpPath();
     final ffmpegPath = await _binaryManager.getFfmpegPath();
@@ -210,12 +210,19 @@ class YtDlpService {
       '8',
     ];
 
+    // Apply global speed limit if set
+    if (limitRateBps > 0) {
+      args.addAll(
+          ['--limit-rate', '${limitRateBps}']); // yt-dlp accepts bytes/s
+    }
+
     final outputTemplate = customFilename != null
         ? '$customFilename.%(ext)s'
         : '%(title)s.%(ext)s';
 
     if (tempPath != null) {
-      args.addAll(['-P', 'temp:$tempPath', '-P', downloadPath, '-o', outputTemplate]);
+      args.addAll(
+          ['-P', 'temp:$tempPath', '-P', downloadPath, '-o', outputTemplate]);
     } else {
       args.addAll(['-o', '$downloadPath/$outputTemplate']);
     }
@@ -326,7 +333,7 @@ class YtDlpService {
       if (subFile != null) return _cleanVtt(await subFile.readAsString());
       if (result.exitCode != 0) {
         debugPrint("Subtitle extraction failed for lang=$langCode");
-        throw Exception(result.stderr); 
+        throw Exception(result.stderr);
       }
       return null;
     } catch (e) {
@@ -339,8 +346,8 @@ class YtDlpService {
     }
   }
 
-  static final _vttTimestampRegex = RegExp(
-      r'(\d{2}:)?\d{2}:\d{2}\.\d{3}\s-->\s(\d{2}:)?\d{2}:\d{2}\.\d{3}');
+  static final _vttTimestampRegex =
+      RegExp(r'(\d{2}:)?\d{2}:\d{2}\.\d{3}\s-->\s(\d{2}:)?\d{2}:\d{2}\.\d{3}');
   static final _htmlTagRegex = RegExp(r'<[^>]*>');
 
   // Strips VTT metadata, timestamps, and HTML tags to produce plain transcript text.
@@ -392,7 +399,8 @@ class YtDlpService {
         throw Exception('yt-dlp error: ${result.stderr}');
       }
 
-      final lines = const LineSplitter().convert(result.stdout.toString().trim());
+      final lines =
+          const LineSplitter().convert(result.stdout.toString().trim());
       if (lines.isEmpty) throw Exception('Empty output from yt-dlp');
 
       Map<String, dynamic>? playlistInfo;
@@ -476,7 +484,8 @@ class YtDlpService {
     const outputTemplate = '%(playlist_index)s - %(title)s.%(ext)s';
 
     if (tempPath != null) {
-      args.addAll(['-P', 'temp:$tempPath', '-P', downloadPath, '-o', outputTemplate]);
+      args.addAll(
+          ['-P', 'temp:$tempPath', '-P', downloadPath, '-o', outputTemplate]);
     } else {
       args.addAll(['-o', '$downloadPath/$outputTemplate']);
     }

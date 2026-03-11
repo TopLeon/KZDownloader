@@ -287,27 +287,32 @@ class _ContentListScreenState extends ConsumerState<ContentListScreen> {
         } else if (item is DownloadTask) {
           final task = item;
           final isSelected = widget.selectedTask?.id == task.id;
+          final staggerDelay = (index * 35).clamp(0, 420);
 
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: task.isPlaylistContainer
-                ? ytplaylist.YouTubePlaylistCard(
-                    playlist: task,
-                    isSelected: isSelected,
-                    onTap: () => widget.onTaskSelected(task),
-                  )
-                : InkWell(
-                    onTap: () {
-                      ref.read(videoChatProvider.notifier).selectVideo(task);
-                      widget.onTaskSelected(task);
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: DownloadCard(
-                      task: task,
-                      hideActions: true,
+          return _AnimatedListItem(
+            key: ValueKey('anim_${task.id}'),
+            delayMs: staggerDelay,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: task.isPlaylistContainer
+                  ? ytplaylist.YouTubePlaylistCard(
+                      playlist: task,
                       isSelected: isSelected,
+                      onTap: () => widget.onTaskSelected(task),
+                    )
+                  : InkWell(
+                      onTap: () {
+                        ref.read(videoChatProvider.notifier).selectVideo(task);
+                        widget.onTaskSelected(task);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: DownloadCard(
+                        task: task,
+                        hideActions: true,
+                        isSelected: isSelected,
+                      ),
                     ),
-                  ),
+            ),
           );
         }
         return const SizedBox.shrink();
@@ -536,5 +541,65 @@ class _ContentListScreenState extends ConsumerState<ContentListScreen> {
     }
 
     return sortedTasks;
+  }
+}
+
+// ── Staggered list item entry animation ───────────────────────────────────────
+
+class _AnimatedListItem extends StatefulWidget {
+  final Widget child;
+  final int delayMs;
+
+  const _AnimatedListItem({
+    super.key,
+    required this.child,
+    required this.delayMs,
+  });
+
+  @override
+  State<_AnimatedListItem> createState() => _AnimatedListItemState();
+}
+
+class _AnimatedListItemState extends State<_AnimatedListItem>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic);
+
+    if (widget.delayMs == 0) {
+      _ctrl.forward();
+    } else {
+      Future.delayed(Duration(milliseconds: widget.delayMs), () {
+        if (mounted) _ctrl.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.04),
+          end: Offset.zero,
+        ).animate(_anim),
+        child: widget.child,
+      ),
+    );
   }
 }

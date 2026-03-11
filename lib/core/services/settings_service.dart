@@ -21,6 +21,17 @@ class SettingsService {
   static const String _keyMaxConcurrentGlobalDownloads =
       'max_concurrent_global_downloads';
 
+  // Advanced Options
+  static const String _keyCustomUserAgent = 'custom_user_agent';
+  static const String _keyProxyEnabled = 'proxy_enabled';
+  static const String _keyProxyType = 'proxy_type';
+  static const String _keyProxyHost = 'proxy_host';
+  static const String _keyProxyPort = 'proxy_port';
+  static const String _keyProxyUsername = 'proxy_username';
+  static const String _keyProxyPassword = 'proxy_password';
+  static const String _keyGlobalSpeedLimitBps = 'global_speed_limit_bps';
+  static const String _keySpeedGraphEnabled = 'speed_graph_enabled';
+
   // Gets whether summary animations are enabled.
   Future<bool> getSummaryAnimationsEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -172,6 +183,108 @@ class SettingsService {
   Future<void> setMaxConcurrentGlobalDownloads(int count) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyMaxConcurrentGlobalDownloads, count);
+  }
+
+  // ===========================================================================
+  // Advanced Options
+  // ===========================================================================
+
+  // Custom User-Agent
+  Future<String?> getCustomUserAgent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyCustomUserAgent);
+  }
+
+  Future<void> setCustomUserAgent(String? userAgent) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (userAgent == null || userAgent.trim().isEmpty) {
+      await prefs.remove(_keyCustomUserAgent);
+    } else {
+      await prefs.setString(_keyCustomUserAgent, userAgent.trim());
+    }
+  }
+
+  // Proxy settings
+  Future<bool> getProxyEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyProxyEnabled) ?? false;
+  }
+
+  Future<void> setProxyEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyProxyEnabled, enabled);
+  }
+
+  Future<String> getProxyType() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyProxyType) ?? 'http';
+  }
+
+  Future<void> setProxyType(String type) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyProxyType, type);
+  }
+
+  Future<String> getProxyHost() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyProxyHost) ?? '';
+  }
+
+  Future<void> setProxyHost(String host) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyProxyHost, host);
+  }
+
+  Future<int> getProxyPort() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyProxyPort) ?? 0;
+  }
+
+  Future<void> setProxyPort(int port) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyProxyPort, port);
+  }
+
+  Future<String> getProxyUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyProxyUsername) ?? '';
+  }
+
+  Future<void> setProxyUsername(String username) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyProxyUsername, username);
+  }
+
+  Future<String> getProxyPassword() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyProxyPassword) ?? '';
+  }
+
+  Future<void> setProxyPassword(String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyProxyPassword, password);
+  }
+
+  // Global Speed Limit (bytes per second, 0 = unlimited)
+  Future<int> getGlobalSpeedLimitBps() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyGlobalSpeedLimitBps) ?? 0;
+  }
+
+  Future<void> setGlobalSpeedLimitBps(int bps) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyGlobalSpeedLimitBps, bps);
+  }
+
+  // Speed Graph overlay
+  Future<bool> getSpeedGraphEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keySpeedGraphEnabled) ?? true;
+  }
+
+  Future<void> setSpeedGraphEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySpeedGraphEnabled, enabled);
   }
 }
 

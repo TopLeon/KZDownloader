@@ -28,7 +28,8 @@ class Sidebar extends ConsumerStatefulWidget {
   ConsumerState<Sidebar> createState() => _SidebarState();
 }
 
-class _SidebarState extends ConsumerState<Sidebar> {
+class _SidebarState extends ConsumerState<Sidebar>
+    with SingleTickerProviderStateMixin {
   bool _isLibraryExpanded = true;
   bool _isDownloadsExpanded = true;
 
@@ -53,8 +54,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
       }
     }
 
-    // debugPrint(downloadList[0].computedStatus.toString());
-
     int getInProgressCount() => downloadList
         .where((t) =>
             t.downloadStatus == WorkStatus.running &&
@@ -67,8 +66,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
             t.downloadStatus == WorkStatus.failed && t.playlistParentId == null)
         .length;
 
-    return Container(
-      width: widget.isMinimized ? 80 : 240,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      width: widget.isMinimized ? 80 : 235,
       padding: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
         color: colorScheme.surface,
@@ -87,14 +88,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
           if (widget.isMinimized)
             Padding(
               padding: const EdgeInsets.only(bottom: 6, top: 14),
-              child: InkWell(
-                onTap: widget.onToggle,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: FIcon(RI.RiSideBarFill,
-                      size: 24, color: colorScheme.primary),
-                ),
+              child: _AnimatedSidebarIconButton(
+                onTap: widget.onToggle ?? () {},
+                icon: FIcon(RI.RiSideBarFill,
+                    size: 24, color: colorScheme.primary),
               ),
             )
           else
@@ -127,14 +124,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     ),
                     const Spacer(),
                     if (widget.onToggle != null)
-                      InkWell(
-                        onTap: widget.onToggle,
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4.0),
-                          child: FIcon(RI.RiSideBarFill,
-                              size: 18, color: colorScheme.onSurfaceVariant),
-                        ),
+                      _AnimatedSidebarIconButton(
+                        onTap: widget.onToggle!,
+                        icon: FIcon(RI.RiSideBarFill,
+                            size: 18, color: colorScheme.onSurfaceVariant),
                       ),
                   ],
                 ),
@@ -340,6 +333,75 @@ class _SidebarState extends ConsumerState<Sidebar> {
   }
 }
 
+// ── Animated icon button for the toggle ───────────────────────────────────────
+
+class _AnimatedSidebarIconButton extends StatefulWidget {
+  final VoidCallback onTap;
+  final Widget icon;
+
+  const _AnimatedSidebarIconButton({
+    required this.onTap,
+    required this.icon,
+  });
+
+  @override
+  State<_AnimatedSidebarIconButton> createState() =>
+      _AnimatedSidebarIconButtonState();
+}
+
+class _AnimatedSidebarIconButtonState extends State<_AnimatedSidebarIconButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.88).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(_) => _ctrl.forward();
+  void _onTapUp(_) {
+    _ctrl.reverse();
+    widget.onTap();
+  }
+
+  void _onTapCancel() => _ctrl.reverse();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _onTapDown,
+      onTapUp: _onTapUp,
+      onTapCancel: _onTapCancel,
+      child: ScaleTransition(
+        scale: _scale,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: widget.icon,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Sidebar group ──────────────────────────────────────────────────────────────
+
 class _SidebarGroup extends StatelessWidget {
   final String title;
   final FIconObject icon;
@@ -388,9 +450,8 @@ class _SidebarGroup extends StatelessWidget {
                 const SizedBox(width: 8),
                 AnimatedRotation(
                   turns: isExpanded ? 0 : -0.25,
-
-                  // 0 = down, -0.25 = right
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
                   child: FIcon(RI.RiArrowDownSLine,
                       size: 18, color: colorScheme.onSurfaceVariant),
                 ),
@@ -408,7 +469,10 @@ class _SidebarGroup extends StatelessWidget {
           secondChild: const SizedBox(width: double.infinity),
           crossFadeState:
               isExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-          duration: const Duration(milliseconds: 200),
+          duration: const Duration(milliseconds: 250),
+          firstCurve: Curves.easeOutCubic,
+          secondCurve: Curves.easeInCubic,
+          sizeCurve: Curves.easeOutCubic,
         ),
         if (isExpanded) const SizedBox(height: 8),
       ],
@@ -416,7 +480,9 @@ class _SidebarGroup extends StatelessWidget {
   }
 }
 
-class _SidebarItem extends StatelessWidget {
+// ── Sidebar item ───────────────────────────────────────────────────────────────
+
+class _SidebarItem extends StatefulWidget {
   final String label;
   final FIconObject icon;
   final FIconObject selectedIcon;
@@ -444,35 +510,93 @@ class _SidebarItem extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final activeColor = colorScheme.primary;
-    final inactiveColor = colorScheme.onSurfaceVariant;
+  State<_SidebarItem> createState() => _SidebarItemState();
+}
 
-    if (isMinimized) {
+class _SidebarItemState extends State<_SidebarItem>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pressCtrl;
+  late final Animation<double> _pressScale;
+  bool _isHovered = false;
+  bool _labelVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+    );
+    _pressScale = Tween<double>(begin: 1.0, end: 0.96).animate(
+      CurvedAnimation(parent: _pressCtrl, curve: Curves.easeInOut),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _labelVisible = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pressCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onTapDown(_) => _pressCtrl.forward();
+  void _onTapUp(_) {
+    _pressCtrl.reverse();
+    widget.onTap();
+  }
+
+  void _onTapCancel() => _pressCtrl.reverse();
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor = widget.colorScheme.primary;
+    final inactiveColor = widget.colorScheme.onSurfaceVariant;
+
+    if (widget.isMinimized) {
       return Tooltip(
-        message: label,
+        message: widget.label,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
-          child: InkWell(
-            onTap: onTap,
-            splashColor: Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? colorScheme.tertiary
-
-                    // Subtle background for selection
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: FIcon(
-                  isSelected ? selectedIcon : icon,
-                  size: 24,
-                  color: isSelected ? activeColor : inactiveColor,
+          child: GestureDetector(
+            onTapDown: _onTapDown,
+            onTapUp: _onTapUp,
+            onTapCancel: _onTapCancel,
+            child: ScaleTransition(
+              scale: _pressScale,
+              child: MouseRegion(
+                onEnter: (_) => setState(() => _isHovered = true),
+                onExit: (_) => setState(() => _isHovered = false),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: widget.isSelected
+                        ? widget.colorScheme.tertiary
+                        : _isHovered
+                            ? widget.colorScheme.tertiary.withOpacity(0.6)
+                            : widget.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: widget.isSelected
+                        ? Border.all(
+                            color: widget.colorScheme.primary.withOpacity(0.15),
+                            width: 1)
+                        : null,
+                  ),
+                  child: Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      child: FIcon(
+                        widget.isSelected ? widget.selectedIcon : widget.icon,
+                        key: ValueKey(widget.isSelected),
+                        size: 22,
+                        color: widget.isSelected ? activeColor : inactiveColor,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -483,89 +607,130 @@ class _SidebarItem extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          splashColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? colorScheme.tertiary
-
-                  // Subtle background for selection
-                  : Colors.transparent,
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
-              boxShadow: [
-                if (isSelected)
-                  BoxShadow(
-                    color: colorScheme.shadow.withOpacity(0.025),
-                    blurRadius: 20,
-                    offset: const Offset(0, 2),
-                  )
-              ],
-              border: isSelected
-                  ? Border.all(
-                      color: colorScheme.primary.withOpacity(0.15), width: 1)
-                  : null,
-            ),
-            child: Row(
-              children: [
-                // Animated Icon
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: FIcon(
-                    isSelected ? selectedIcon : icon,
-                    key: ValueKey(isSelected),
-                    size: 20,
-                    color: isSelected ? activeColor : inactiveColor,
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Label
-                Expanded(
-                  child: Text(
-                    label,
-                    style: GoogleFonts.montserrat(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w500,
-                      color: isSelected ? colorScheme.onSurface : inactiveColor,
+      child: GestureDetector(
+        onTapDown: _onTapDown,
+        onTapUp: _onTapUp,
+        onTapCancel: _onTapCancel,
+        child: ScaleTransition(
+          scale: _pressScale,
+          child: MouseRegion(
+            onEnter: (_) => setState(() => _isHovered = true),
+            onExit: (_) => setState(() => _isHovered = false),
+            cursor: SystemMouseCursors.click,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: widget.isSelected
+                    ? widget.colorScheme.tertiary
+                    : _isHovered
+                        ? widget.colorScheme.tertiary.withOpacity(0.5)
+                        : widget.colorScheme.surface,
+                borderRadius: const BorderRadius.all(Radius.circular(12)),
+                boxShadow: [
+                  if (widget.isSelected)
+                    BoxShadow(
+                      color: widget.colorScheme.shadow.withOpacity(0.025),
+                      blurRadius: 20,
+                      offset: const Offset(0, 2),
+                    )
+                ],
+                border: widget.isSelected
+                    ? Border.all(
+                        color: widget.colorScheme.primary.withOpacity(0.15),
+                        width: 1)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  // Animated Icon
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: FIcon(
+                      widget.isSelected ? widget.selectedIcon : widget.icon,
+                      key: ValueKey(widget.isSelected),
+                      size: 20,
+                      color: widget.isSelected ? activeColor : inactiveColor,
                     ),
                   ),
-                ),
+                  const SizedBox(width: 12),
 
-                // Counter Badge (Pill Style)
-                if (!hideCount && count > 0)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? colorScheme.primary.withOpacity(0.1)
-
-                          // If active, primary color
-                          : colorScheme.surfaceContainerHighest,
-
-                      // If inactive, gray
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      count.toString(),
-                      style: GoogleFonts.montserrat(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected ? activeColor : inactiveColor,
+                  // Label with animated color
+                  Expanded(
+                    child: AnimatedOpacity(
+                      opacity: _labelVisible ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      child: AnimatedSlide(
+                        offset: _labelVisible
+                            ? Offset.zero
+                            : const Offset(-0.1, 0),
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOutCubic,
+                          style: GoogleFonts.montserrat(
+                            fontSize: 13.5,
+                            fontWeight: widget.isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            color: widget.isSelected
+                                ? widget.colorScheme.onSurface
+                                : inactiveColor,
+                          ),
+                          child: Text(widget.label),
+                        ),
                       ),
                     ),
                   ),
 
-                if (isSettings)
-                  FIcon(RI.RiArrowRightSLine, size: 18, color: inactiveColor)
-              ],
+                  // Counter Badge — animated switcher
+                  if (!widget.hideCount && widget.count > 0)
+                    AnimatedOpacity(
+                      opacity: _labelVisible ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOutCubic,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (child, anim) => ScaleTransition(
+                          scale: anim,
+                          child: FadeTransition(opacity: anim, child: child),
+                        ),
+                        child: Container(
+                          key: ValueKey(widget.count),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: widget.isSelected
+                                ? widget.colorScheme.primary.withOpacity(0.1)
+                                : widget.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            widget.count.toString(),
+                            style: GoogleFonts.montserrat(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: widget.isSelected
+                                  ? activeColor
+                                  : inactiveColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  if (widget.isSettings)
+                    AnimatedOpacity(
+                      opacity: _isHovered ? 1.0 : 0.5,
+                      duration: const Duration(milliseconds: 200),
+                      child: FIcon(RI.RiArrowRightSLine,
+                          size: 18, color: inactiveColor),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

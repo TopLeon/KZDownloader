@@ -3,6 +3,8 @@ import 'package:flutter_animation_progress_bar/flutter_animation_progress_bar.da
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:kzdownloader/core/download/providers/download_provider.dart';
+import 'package:kzdownloader/core/utils/download_helper.dart';
+import 'package:kzdownloader/core/services/memory_service.dart';
 import 'package:kzdownloader/l10n/arb/app_localizations.dart';
 import 'package:kzdownloader/models/download_task.dart';
 import 'package:ultimate_flutter_icons/ficon.dart';
@@ -68,6 +70,29 @@ class DownloadStatusWidget extends ConsumerWidget {
         ),
       );
     }
+
+    // Live speed aggregation
+    final progressMap = ref.watch(activeDownloadProgressProvider);
+    final speedStrings = progressMap.values
+        .map((e) => e['downloadSpeed'] as String?)
+        .where((s) => s != null && s.isNotEmpty)
+        .cast<String>()
+        .toList();
+    final speedDisplay = speedStrings.isEmpty
+        ? null
+        : speedStrings.length == 1
+            ? speedStrings.first
+            : DownloadHelper.formatBytes(
+                speedStrings
+                    .map(_parseSpeedToBytes)
+                    .fold<double>(0, (a, b) => a + b)
+                    .toInt(),
+              ) +
+                '/s';
+
+    // RAM monitoring
+    final memoryAsync = ref.watch(memoryUsageProvider);
+    final memoryService = ref.watch(memoryServiceProvider);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -146,7 +171,49 @@ class DownloadStatusWidget extends ConsumerWidget {
               progressColor: colorScheme.primary,
             ),
           ),
-          const SizedBox(height: 12),
+          // Download speed display
+          if (!status.allPaused && speedDisplay != null) ...[  
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                FIcon(RI.RiSpeedLine,
+                    size: 12,
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.6)),
+                const SizedBox(width: 4),
+                Text(
+                  speedDisplay,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          // RAM usage display
+          const SizedBox(height: 8),
+          memoryAsync.when(
+            data: (mb) => Row(
+              children: [
+                FIcon(RI.RiCpuLine,
+                    size: 12,
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.6)),
+                const SizedBox(width: 4),
+                Text(
+                  'RAM: $mb MB • Peak: ${memoryService.peakMb} MB',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -201,6 +268,21 @@ class DownloadStatusWidget extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Parses a formatted speed string like "10.50 MB/s" to bytes/sec.
+  static double _parseSpeedToBytes(String s) {
+    final clean = s.replaceFirst(RegExp(r'/s$'), '').trim();
+    final parts = clean.split(' ');
+    if (parts.length != 2) return 0;
+    final value = double.tryParse(parts[0]) ?? 0;
+    final unit = parts[1].toUpperCase();
+    const units = {'B': 1, 'KB': 1024, 'MB': 1048576, 'GB': 1073741824};
+    // also handle IEC units from yt-dlp (KiB, MiB, GiB)
+    const iecUnits = {'KIB': 1024, 'MIB': 1048576, 'GIB': 1073741824};
+    final multiplier =
+        units[unit] ?? iecUnits[unit.replaceAll('I', '')] ?? 1;
+    return value * multiplier;
   }
 
   Future<void> _confirmCancelAll(

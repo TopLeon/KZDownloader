@@ -231,7 +231,8 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
                                                     Text(
                                                       getSortOptionLabel(
                                                           selectedItem, l10n),
-                                                      style: GoogleFonts.montserrat(
+                                                      style: GoogleFonts
+                                                          .montserrat(
                                                         fontSize: 14,
                                                         fontWeight:
                                                             FontWeight.w500,
@@ -340,7 +341,7 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
                                         right: 0,
                                         top: 16,
                                         child: SizedBox(
-                                          width: 155,
+                                          width: 156,
                                           child: CustomDropdown<SortOption>(
                                             hintText: getSortOptionLabel(
                                                 widget.selectedSortOption,
@@ -417,7 +418,8 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
                                                     Text(
                                                       getSortOptionLabel(
                                                           selectedItem, l10n),
-                                                      style: GoogleFonts.montserrat(
+                                                      style: GoogleFonts
+                                                          .montserrat(
                                                         fontSize: 14,
                                                         fontWeight:
                                                             FontWeight.w500,

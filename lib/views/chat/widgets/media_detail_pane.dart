@@ -383,7 +383,6 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
     );
   }
 
-  // ignore: unused_element
   Widget _buildMetadataChips(BuildContext context, ThemeData theme, bool isDark,
       bool fileExists, bool hasSummary) {
     var l10n = AppLocalizations.of(context)!;
@@ -407,6 +406,9 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
           ] else if (task.downloadStatus.isSuccess) ...[
             _buildMetaInternal(RI.RiDeleteBinLine, l10n.deleted, theme, isDark),
           ],
+          if (task.category == TaskCategory.video)
+          _buildMetaInternal(
+              RI.RiHardDriveLine, task.totalSize!, theme, isDark),
         ]
       ],
     );
@@ -576,7 +578,17 @@ class MediaDetailPaneState extends ConsumerState<MediaDetailPane> {
                 : task.processTime ?? l10n.unknown,
             theme.colorScheme.primary,
           ),
-          if (task.downloadSpeed != null) ...[
+          if (task.totalSize != null) ...[  
+            const SizedBox(height: 12),
+            _buildInfoRow(
+              context,
+              RI.RiHardDriveLine,
+              l10n.fileSize,
+              task.totalSize!,
+              theme.colorScheme.primary,
+            ),
+          ],
+          if (task.downloadSpeed != null) ...[  
             const SizedBox(height: 12),
             _buildInfoRow(
               context,

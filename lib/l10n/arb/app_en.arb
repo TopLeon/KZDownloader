@@ -561,5 +561,23 @@
     "exportSuccess": "Export successful",
     "importSuccess": "Import successful",
     "noMatchingTracks": "No matching tracks found",
-    "autoplay": "Autoplay"
+    "autoplay": "Autoplay",
+
+    "advancedOptions": "Advanced Options",
+    "globalSpeedLimit": "Global Speed Limit",
+    "speedLimitHint": "0 = unlimited",
+    "speedLimitDescription": "Limit overall download speed (0 = no limit). Applied per-worker.",
+    "proxySettings": "Proxy Configuration",
+    "enableProxy": "Enable Proxy",
+    "proxyType": "Type",
+    "proxyHost": "Host",
+    "proxyPort": "Port",
+    "proxyUsername": "Username",
+    "proxyPassword": "Password",
+    "optional": "Optional",
+    "customUserAgent": "Custom User-Agent",
+    "userAgentHint": "Leave empty for default",
+    "userAgentDescription": "Override the User-Agent header sent with download requests.",
+    "speedGraph": "Speed Graph",
+    "speedGraphDescription": "Show speed history graph overlay on download cards."
 }

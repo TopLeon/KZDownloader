@@ -18,7 +18,7 @@ import 'package:kzdownloader/core/download/providers/summary_provider.dart';
 import 'package:kzdownloader/core/download/providers/url_metadata.dart';
 
 import 'package:kzdownloader/core/download/strategies/download_strategy.dart';
-import 'package:kzdownloader/core/download/strategies/standard_download_strategy.dart';
+
 import 'package:kzdownloader/core/download/strategies/idm_download_strategy.dart';
 import 'package:kzdownloader/core/download/strategies/ytdlp_strategy.dart';
 import 'package:kzdownloader/core/download/strategies/playlist_strategy.dart';
@@ -197,6 +197,9 @@ class DownloadList extends _$DownloadList {
     int? selectedM3U8VariantIndex,
     int? parallelDownloads,
     Set<int>? selectedVideoIndices,
+    int? maxWorkers,
+    String? advancedDownloadPath,
+    int? advancedSpeedLimitBps,
   }) async {
     final db = ref.read(dbServiceProvider);
     final url = rawUrl.trim();
@@ -226,8 +229,8 @@ class DownloadList extends _$DownloadList {
       ..createdAt = DateTime.now()
       // M3U8 containers get isPlaylistContainer = true inside M3U8Strategy;
       // we only pre-set the flag for known playlist URLs (YT playlists).
-      ..isPlaylistContainer = (category == TaskCategory.playlist ||
-          UrlUtils.isYouTubePlaylist(url))
+      ..isPlaylistContainer =
+          (category == TaskCategory.playlist || UrlUtils.isYouTubePlaylist(url))
       ..downloadStatus = onlySummary ? WorkStatus.none : WorkStatus.pending
       ..summaryStatus =
           (summarize || onlySummary) ? WorkStatus.pending : WorkStatus.none;
@@ -260,7 +263,10 @@ class DownloadList extends _$DownloadList {
           summarize: summarize,
           selectedM3U8VariantIndex: selectedM3U8VariantIndex,
           parallelDownloads: parallelDownloads,
-          selectedVideoIndices: selectedVideoIndices);
+          selectedVideoIndices: selectedVideoIndices,
+          maxWorkers: maxWorkers,
+          advancedDownloadPath: advancedDownloadPath,
+          advancedSpeedLimitBps: advancedSpeedLimitBps);
     }
 
     return (await db.getTask(task.id))!;
@@ -395,7 +401,10 @@ class DownloadList extends _$DownloadList {
       bool isAudio,
       bool onlySummary,
       String summaryType,
-      {int? selectedM3U8VariantIndex}) async {
+      {int? selectedM3U8VariantIndex,
+      int? maxWorkers,
+      String? advancedDownloadPath,
+      int? advancedSpeedLimitBps}) async {
     final task = await db.getTask(taskId);
     if (task == null) return null;
 
@@ -442,7 +451,10 @@ class DownloadList extends _$DownloadList {
           quality: quality,
           isAudio: isAudio,
           summarize: summarize,
-          selectedM3U8VariantIndex: selectedM3U8VariantIndex);
+          selectedM3U8VariantIndex: selectedM3U8VariantIndex,
+          maxWorkers: maxWorkers,
+          advancedDownloadPath: advancedDownloadPath,
+          advancedSpeedLimitBps: advancedSpeedLimitBps);
     }
 
     return db.getTask(taskId);
@@ -459,6 +471,9 @@ class DownloadList extends _$DownloadList {
     int? selectedM3U8VariantIndex,
     int? parallelDownloads,
     Set<int>? selectedVideoIndices,
+    int? maxWorkers,
+    String? advancedDownloadPath,
+    int? advancedSpeedLimitBps,
   }) async {
     final db = ref.read(dbServiceProvider);
 
@@ -495,6 +510,9 @@ class DownloadList extends _$DownloadList {
         selectedM3U8VariantIndex: selectedM3U8VariantIndex,
         parallelDownloads: parallelDownloads,
         selectedVideoIndices: selectedVideoIndices,
+        maxWorkers: maxWorkers,
+        advancedDownloadPath: advancedDownloadPath,
+        advancedSpeedLimitBps: advancedSpeedLimitBps,
       );
     });
   }
@@ -509,6 +527,9 @@ class DownloadList extends _$DownloadList {
     int? selectedM3U8VariantIndex,
     int? parallelDownloads,
     Set<int>? selectedVideoIndices,
+    int? maxWorkers,
+    String? advancedDownloadPath,
+    int? advancedSpeedLimitBps,
   }) async {
     final db = ref.read(dbServiceProvider);
 
@@ -528,10 +549,18 @@ class DownloadList extends _$DownloadList {
 
     DownloadStrategy strategy;
 
+    // Resolve advanced speed limit: per-download override takes precedence
+    final effectiveSpeedLimitBps =
+        advancedSpeedLimitBps != null && advancedSpeedLimitBps > 0
+            ? advancedSpeedLimitBps
+            : null; // null = use strategy defaults (global setting)
+
     // Check M3U8 by extension first
     if (UrlUtils.isM3U8Playlist(task.url)) {
       strategy = M3U8Strategy(taskId, db, ref,
-          selectedVariantIndex: selectedM3U8VariantIndex);
+          selectedVariantIndex: selectedM3U8VariantIndex,
+          targetDirOverride: advancedDownloadPath,
+          speedLimitBpsOverride: effectiveSpeedLimitBps);
     } else if (task.isPlaylistContainer ||
         UrlUtils.isYouTubePlaylist(task.url)) {
       final ytDlp = YtDlpService();
@@ -542,11 +571,15 @@ class DownloadList extends _$DownloadList {
         ytDlp,
         overrideParallelDownloads: parallelDownloads,
         selectedVideoIndices: selectedVideoIndices ?? {},
+        targetDirOverride: advancedDownloadPath,
+        speedLimitBpsOverride: effectiveSpeedLimitBps,
       );
     } else if (UrlUtils.detectProvider(task.url) == 'yt-dlp' ||
         task.provider == 'yt-dlp') {
       final ytDlp = YtDlpService();
-      strategy = YtDlpStrategy(taskId, db, ref, ytDlp);
+      strategy = YtDlpStrategy(taskId, db, ref, ytDlp,
+          targetDirOverride: advancedDownloadPath,
+          speedLimitBpsOverride: effectiveSpeedLimitBps);
     } else {
       final meta = await _performHeadRequest(task.url);
 
@@ -558,7 +591,9 @@ class DownloadList extends _$DownloadList {
           t.category = TaskCategory.video;
         });
         strategy = M3U8Strategy(taskId, db, ref,
-            selectedVariantIndex: selectedM3U8VariantIndex);
+            selectedVariantIndex: selectedM3U8VariantIndex,
+            targetDirOverride: advancedDownloadPath,
+            speedLimitBpsOverride: effectiveSpeedLimitBps);
       } else {
         if (meta != null) {
           await db.updateTask(taskId, (t) {
@@ -594,18 +629,12 @@ class DownloadList extends _$DownloadList {
           }
         }
 
-        bool useIdm = (task.provider == 'Pro' ||
-                (task.provider != 'Standard' && size > 100 * 1024 * 1024)) &&
-            size > 0 &&
-            acceptRanges;
-
-        if (useIdm) {
-          strategy = IDMDownloadStrategy(taskId, db, ref,
-              knownSize: size, knownAcceptRanges: acceptRanges);
-        } else {
-          strategy = StandardDownloadStrategy(taskId, db, ref,
-              knownSize: size, knownAcceptRanges: acceptRanges);
-        }
+        strategy = IDMDownloadStrategy(taskId, db, ref,
+            knownSize: size,
+            knownAcceptRanges: acceptRanges,
+            maxWorkers: maxWorkers,
+            targetDirOverride: advancedDownloadPath,
+            speedLimitBpsOverride: effectiveSpeedLimitBps);
       }
     }
 

@@ -6,7 +6,9 @@ import 'package:kzdownloader/core/download/logic/idm_downloader.dart';
 import 'package:kzdownloader/core/download/logic/file_path_resolver.dart';
 import 'package:kzdownloader/core/download/logic/speed_tracker.dart';
 import 'package:kzdownloader/core/download/strategies/download_strategy.dart';
+import 'package:kzdownloader/core/services/settings_service.dart';
 import 'package:kzdownloader/core/utils/download_helper.dart';
+import 'package:kzdownloader/core/utils/utils.dart';
 import 'package:kzdownloader/models/download_task.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -14,6 +16,11 @@ import 'package:path_provider/path_provider.dart';
 class IDMDownloadStrategy extends DownloadStrategy {
   final int? knownSize;
   final bool? knownAcceptRanges;
+
+  /// Per-download overrides (null = use global settings)
+  final int? maxWorkers;
+  final String? targetDirOverride;
+  final int? speedLimitBpsOverride;
 
   IDMDownloader? _downloader;
   StreamSubscription? _statusSub;
@@ -25,6 +32,9 @@ class IDMDownloadStrategy extends DownloadStrategy {
     super.ref, {
     this.knownSize,
     this.knownAcceptRanges,
+    this.maxWorkers,
+    this.targetDirOverride,
+    this.speedLimitBpsOverride,
   });
 
   @override
@@ -36,12 +46,63 @@ class IDMDownloadStrategy extends DownloadStrategy {
       final task = await db.getTask(taskId);
       if (task == null) throw Exception('Task $taskId not found');
 
-      final filePath = await FilePathResolver.resolve(taskId, db);
+      // Resolve file path: use targetDirOverride if set, else default
+      String filePath;
+      if (targetDirOverride != null) {
+        // Build path in override directory without touching global settings
+        final t = await db.getTask(taskId);
+        final filename = (t?.title != null && t!.title!.isNotEmpty)
+            ? FileUtils.sanitizeFilename(t.title!)
+            : 'download_${DateTime.now().millisecondsSinceEpoch}.bin';
+        filePath = '$targetDirOverride${Platform.pathSeparator}$filename';
+        await db.updateFilePath(taskId, filePath, targetDirOverride!);
+      } else {
+        filePath = await FilePathResolver.resolve(taskId, db);
+      }
+
       final tempDir = await getTemporaryDirectory();
       final metaDir = '${tempDir.path}${Platform.pathSeparator}kz_meta';
       await Directory(metaDir).create(recursive: true);
 
-      _downloader = IDMDownloader(metaDir: metaDir);
+      // Read advanced settings
+      final settings = SettingsService();
+      final customUserAgent = await settings.getCustomUserAgent();
+      final proxyEnabled = await settings.getProxyEnabled();
+      // Speed limit: per-download override takes precedence over global setting
+      final globalSpeedLimit = await settings.getGlobalSpeedLimitBps();
+      final speedLimit = speedLimitBpsOverride ?? globalSpeedLimit;
+
+      ProxyConfig? proxyConfig;
+      if (proxyEnabled) {
+        final host = await settings.getProxyHost();
+        final port = await settings.getProxyPort();
+        if (host.isNotEmpty && port > 0) {
+          proxyConfig = ProxyConfig(
+            host: host,
+            port: port,
+            type: await settings.getProxyType(),
+            username: (await settings.getProxyUsername()).isNotEmpty
+                ? await settings.getProxyUsername()
+                : null,
+            password: (await settings.getProxyPassword()).isNotEmpty
+                ? await settings.getProxyPassword()
+                : null,
+          );
+        }
+      }
+
+      _downloader = IDMDownloader(
+        maxWorkers: maxWorkers ?? 6,
+        metaDir: metaDir,
+        globalSpeedLimit: speedLimit,
+        proxyConfig: proxyConfig,
+      );
+
+      // Build headers with optional custom user agent
+      final headers = <String, String>{};
+      if (customUserAgent != null && customUserAgent.isNotEmpty) {
+        headers['User-Agent'] = customUserAgent;
+      }
 
       _statusSub = _downloader!.statusStream.listen((data) {
         _handleStatus(data, task);
@@ -50,7 +111,7 @@ class IDMDownloadStrategy extends DownloadStrategy {
       await _downloader!.download(
         task.url,
         filePath,
-        headers: {},
+        headers: headers,
         knownFileSize: knownSize,
         knownAcceptRanges: knownAcceptRanges,
       );
@@ -81,6 +142,8 @@ class IDMDownloadStrategy extends DownloadStrategy {
     final activeWorkers = data['activeWorkers'] as int? ?? 0;
     final totalWorkers = data['totalWorkers'] as int? ?? 0;
     final workers = data['workers'] as List?;
+    final speedHistory = data['speedHistory'] as List<double>?;
+    final proxyActive = data['proxyActive'] as bool? ?? false;
 
     final progressData = <String, dynamic>{
       'progress': progress,
@@ -90,10 +153,14 @@ class IDMDownloadStrategy extends DownloadStrategy {
       'totalSize': totalSize > 0 ? DownloadHelper.formatBytes(totalSize) : null,
       'activeWorkers': activeWorkers,
       'totalWorkers': totalWorkers,
+      'proxyActive': proxyActive,
     };
 
     if (workers != null) {
       progressData['workersProgressJson'] = jsonEncode(workers);
+    }
+    if (speedHistory != null && speedHistory.isNotEmpty) {
+      progressData['speedHistory'] = speedHistory;
     }
 
     updateProgress(progressData);

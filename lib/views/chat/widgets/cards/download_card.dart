@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:ui';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_animation_progress_bar/flutter_animation_progress_bar.dart';
@@ -207,7 +209,9 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
             child: RainbowAnimatedBorderForever(
               disabled: !isSummarizing && !isDownloading,
               borderRadius: 16,
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
                 decoration: BoxDecoration(
                   color: widget.isSelected
                       ? colorScheme.tertiary
@@ -267,7 +271,7 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            "${task.url.split('/')[2].replaceAll("www.", "")} - ${task.channelName ?? l10n.unknownChannel}",
+                                            task.category == TaskCategory.video ? "${task.url.split('/')[2].replaceAll("www.", "")} - ${task.channelName ?? l10n.unknownChannel}" : task.url,
                                             style: GoogleFonts.montserrat(
                                                 fontSize: 13,
                                                 color: Theme.of(context)
@@ -285,10 +289,20 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                                       right: 0,
                                       top: 0,
                                       bottom: 0,
-                                      child: AnimatedOpacity(
+                                      child: TweenAnimationBuilder<double>(
+                                        tween: Tween(begin: 0.0, end: 1.0),
                                         duration:
                                             const Duration(milliseconds: 200),
-                                        opacity: _isHovered ? 1.0 : 0.0,
+                                        curve: Curves.easeOutCubic,
+                                        builder: (context, value, child) =>
+                                            Opacity(
+                                          opacity: value,
+                                          child: Transform.translate(
+                                            offset:
+                                                Offset((1 - value) * 12, 0),
+                                            child: child,
+                                          ),
+                                        ),
                                         child: Container(
                                           padding: const EdgeInsets.only(
                                               left: 100, right: 0),
@@ -481,6 +495,8 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
                               ),
                               if (isDownloading) ...[
                                 const SizedBox(height: 6),
+                                // Speed history graph overlay
+                                _buildSpeedGraphOverlay(context, live),
                                 if (task.category == TaskCategory.generic &&
                                     effectiveActiveWorkers != null &&
                                     effectiveActiveWorkers > 1) ...[
@@ -685,65 +701,86 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = theme.colorScheme;
 
-    return Row(
-      children: [
-        // Checksum Status
-        if (task.category == TaskCategory.generic &&
-            task.expectedChecksum != null &&
-            task.expectedChecksum!.isNotEmpty &&
-            task.downloadStatus == WorkStatus.completed) ...[
-          if (task.checksumResult == 'match')
-            _buildMetaInternal(
-                RI.RiCheckboxCircleLine, l10n.checksumMatch, theme, isDark,
-                color: Colors.green)
-          else if (task.checksumResult == 'mismatch')
-            _buildMetaInternal(
-                RI.RiCloseCircleLine, l10n.checksumMismatch, theme, isDark,
-                color: colorScheme.error)
-          else if (task.checksumResult == 'error')
-            _buildMetaInternal(
-                RI.RiAlertLine, l10n.checksumError, theme, isDark,
-                color: colorScheme.error)
-          else if (task.checksumResult == null)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  l10n.checksumVerifying,
-                  style: TextStyle(
-                      fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(width: 8),
-              ],
-            )
-        ],
-        // Check task status first
-        if (task.downloadStatus == WorkStatus.paused) ...[
-          _buildMetaInternal(RI.RiPauseLine, l10n.actionPause, theme, isDark),
-        ] else if (task.downloadStatus == WorkStatus.failed) ...[
-          _buildMetaInternal(RI.RiAlertLine, l10n.error, theme, isDark),
-        ] else if (task.downloadStatus == WorkStatus.cancelled) ...[
-          _buildMetaInternal(RI.RiCloseLine, l10n.cancel, theme, isDark),
-        ] else if (File(task.filePath ?? '').existsSync()) ...[
-          _buildMetaInternal(RI.RiDownloadLine, l10n.downloaded, theme, isDark),
-        ] else if (task.filePath != null) ...[
-          _buildMetaInternal(RI.RiDeleteBinLine, l10n.deleted, theme, isDark),
-        ],
+    // Check live proxy status for generic downloads
+    final liveProgressMap = ref.watch(activeDownloadProgressProvider);
+    final live = liveProgressMap[task.id];
+    final proxyActive = live?['proxyActive'] as bool? ?? false;
 
-        if (task.totalSize != null)
-          _buildMetaInternal(RI.RiSdCardLine, task.totalSize!, theme, isDark),
-        if (task.summary != null)
-          _buildMetaInternal(RI.RiBardLine, l10n.summarized, theme, isDark),
-      ],
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        children: [
+          // Proxy badge for generic downloads
+          if (task.category == TaskCategory.generic && proxyActive)
+            _buildMetaInternal(RI.RiShieldLine, 'Proxy', theme, isDark,
+                color: const Color(0xFF2196F3)),
+          // Protocol badge
+          if (task.category == TaskCategory.generic) ...[
+            if (task.url.startsWith('https://'))
+              _buildMetaInternal(RI.RiLockLine, 'HTTPS', theme, isDark,
+                  color: Colors.green)
+            else if (task.url.startsWith('http://'))
+              _buildMetaInternal(RI.RiLockUnlockLine, 'HTTP', theme, isDark,
+                  color: Colors.orange),
+          ],
+          // Checksum Status
+          if (task.category == TaskCategory.generic &&
+              task.expectedChecksum != null &&
+              task.expectedChecksum!.isNotEmpty &&
+              task.downloadStatus == WorkStatus.completed) ...[
+            if (task.checksumResult == 'match')
+              _buildMetaInternal(
+                  RI.RiCheckboxCircleLine, l10n.checksumMatch, theme, isDark,
+                  color: Colors.green)
+            else if (task.checksumResult == 'mismatch')
+              _buildMetaInternal(
+                  RI.RiCloseCircleLine, l10n.checksumMismatch, theme, isDark,
+                  color: colorScheme.error)
+            else if (task.checksumResult == 'error')
+              _buildMetaInternal(
+                  RI.RiAlertLine, l10n.checksumError, theme, isDark,
+                  color: colorScheme.error)
+            else if (task.checksumResult == null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    l10n.checksumVerifying,
+                    style: TextStyle(
+                        fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              )
+          ],
+          // Check task status first
+          if (task.downloadStatus == WorkStatus.paused) ...[
+            _buildMetaInternal(RI.RiPauseLine, l10n.actionPause, theme, isDark),
+          ] else if (task.downloadStatus == WorkStatus.failed) ...[
+            _buildMetaInternal(RI.RiAlertLine, l10n.error, theme, isDark),
+          ] else if (task.downloadStatus == WorkStatus.cancelled) ...[
+            _buildMetaInternal(RI.RiCloseLine, l10n.cancel, theme, isDark),
+          ] else if (File(task.filePath ?? '').existsSync()) ...[
+            _buildMetaInternal(RI.RiDownloadLine, l10n.downloaded, theme, isDark),
+          ] else if (task.filePath != null) ...[
+            _buildMetaInternal(RI.RiDeleteBinLine, l10n.deleted, theme, isDark),
+          ],
+      
+          if (task.totalSize != null)
+            _buildMetaInternal(RI.RiSdCardLine, task.totalSize!, theme, isDark),
+          if (task.summary != null)
+            _buildMetaInternal(RI.RiBardLine, l10n.summarized, theme, isDark),
+        ],
+      ),
     );
   }
 
@@ -841,5 +878,126 @@ class _DownloadCardState extends ConsumerState<DownloadCard>
         ),
       ),
     );
+  }
+
+  // Builds the speed history graph overlay (frosted glass effect)
+  Widget _buildSpeedGraphOverlay(
+      BuildContext context, Map<String, dynamic>? live) {
+    final speedHistory = live?['speedHistory'];
+    if (speedHistory == null ||
+        speedHistory is! List ||
+        speedHistory.length < 3) {
+      return const SizedBox.shrink();
+    }
+
+    final List<double> history = speedHistory.cast<double>();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox(
+        height: 28,
+        width: double.infinity,
+        child: Stack(
+          children: [
+            Opacity(
+              opacity: 0.2,
+              child: CustomPaint(
+                size: const Size(double.infinity, 28),
+                painter: _SpeedHistoryPainter(
+                  speeds: history,
+                  lineColor: colorScheme.primary,
+                  fillColor: colorScheme.primary.withOpacity(0.15),
+                ),
+              ),
+            ),
+            BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
+              child: const SizedBox.expand(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Draws a smooth Bezier speed history line graph.
+class _SpeedHistoryPainter extends CustomPainter {
+  final List<double> speeds;
+  final Color lineColor;
+  final Color fillColor;
+
+  _SpeedHistoryPainter({
+    required this.speeds,
+    required this.lineColor,
+    required this.fillColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (speeds.length < 2) return;
+
+    final maxSpeed = speeds.reduce(math.max);
+    if (maxSpeed <= 0) return;
+
+    final n = speeds.length;
+    final dx = size.width / (n - 1);
+
+    // Build list of points
+    final points = <Offset>[];
+    for (int i = 0; i < n; i++) {
+      final x = i * dx;
+      final y = size.height - (speeds[i] / maxSpeed) * size.height * 0.9;
+      points.add(Offset(x, y.clamp(0, size.height)));
+    }
+
+    // Draw smooth Bezier path
+    final linePath = Path();
+    linePath.moveTo(points[0].dx, points[0].dy);
+
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = (i + 2 < points.length) ? points[i + 2] : p2;
+
+      final cp1x = p1.dx + (p2.dx - p0.dx) / 6;
+      final cp1y = p1.dy + (p2.dy - p0.dy) / 6;
+      final cp2x = p2.dx - (p3.dx - p1.dx) / 6;
+      final cp2y = p2.dy - (p3.dy - p1.dy) / 6;
+
+      linePath.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.dx, p2.dy);
+    }
+
+    // Fill area under curve
+    final fillPath = Path.from(linePath);
+    fillPath.lineTo(size.width, size.height);
+    fillPath.lineTo(0, size.height);
+    fillPath.close();
+
+    canvas.drawPath(
+      fillPath,
+      Paint()
+        ..color = fillColor
+        ..style = PaintingStyle.fill,
+    );
+
+    canvas.drawPath(
+      linePath,
+      Paint()
+        ..color = lineColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SpeedHistoryPainter oldDelegate) {
+    return speeds.length != oldDelegate.speeds.length ||
+        (speeds.isNotEmpty &&
+            oldDelegate.speeds.isNotEmpty &&
+            speeds.last != oldDelegate.speeds.last);
   }
 }

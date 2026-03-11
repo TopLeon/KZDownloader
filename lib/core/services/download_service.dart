@@ -3,19 +3,26 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:rhttp_plus/rhttp_plus.dart';
 
-Future<Map<String, String>> getHeadInfo(String url, Map<String, String> headers) async {
+import 'package:kzdownloader/core/download/logic/idm_downloader.dart'
+    show ProxyConfig;
+
+Future<Map<String, String>> getHeadInfo(
+    String url, Map<String, String> headers) async {
   // Clean headers (skip 'host' like in the Rust code)
-  final cleanedHeaders = Map<String, String>.from(headers)..removeWhere((k, _) => k.toLowerCase() == 'host');
+  final cleanedHeaders = Map<String, String>.from(headers)
+    ..removeWhere((k, _) => k.toLowerCase() == 'host');
 
   // Configure with Chrome emulation
-  const settings = ClientSettings(emulator: Emulation.chrome136, redirectSettings: RedirectSettings.limited(10));
+  const settings = ClientSettings(
+      emulator: Emulation.chrome136,
+      redirectSettings: RedirectSettings.limited(10));
 
   // Try HEAD request
   HttpResponse response;
   try {
     response = await Rhttp.head(
-      url, 
-      headers: HttpHeaders.rawMap(cleanedHeaders), 
+      url,
+      headers: HttpHeaders.rawMap(cleanedHeaders),
       settings: settings,
     );
   } catch (e) {
@@ -27,11 +34,12 @@ Future<Map<String, String>> getHeadInfo(String url, Map<String, String> headers)
   if (!isSuccess) {
     try {
       response = await Rhttp.get(
-        url, 
-        headers: HttpHeaders.rawMap(cleanedHeaders), 
+        url,
+        headers: HttpHeaders.rawMap(cleanedHeaders),
         settings: settings,
       );
-      final isGetSuccess = response.statusCode >= 200 && response.statusCode < 300;
+      final isGetSuccess =
+          response.statusCode >= 200 && response.statusCode < 300;
       if (!isGetSuccess) {
         throw Exception('Fallback GET failed: ${response.statusCode}');
       }
@@ -56,14 +64,16 @@ Stream<Uint8List> downloadChunkStream(
   String url,
   int start,
   int end,
-  Map<String, String> headers,
-) async* {
+  Map<String, String> headers, {
+  ProxyConfig? proxy,
+}) async* {
   if (start > end && end != -1) {
     throw Exception('Invalid range: start > end');
   }
 
   // Clean headers (skip 'host')
-  final cleanedHeaders = Map<String, String>.from(headers)..removeWhere((k, _) => k.toLowerCase() == 'host');
+  final cleanedHeaders = Map<String, String>.from(headers)
+    ..removeWhere((k, _) => k.toLowerCase() == 'host');
 
   // Add Range header for partial download if needed
   if (start > 0 || end != -1) {
@@ -74,21 +84,34 @@ Stream<Uint8List> downloadChunkStream(
     }
   }
 
-  // Configure with Chrome emulation and redirect following
-  const settings = ClientSettings(
-    emulator: Emulation.chrome136,
-    redirectSettings: RedirectSettings.limited(10),
-  );
+  // Configure with Chrome emulation, redirect following, and optional proxy
+  ClientSettings settings;
+  if (proxy != null && proxy.host.isNotEmpty) {
+    final proxyUrl =
+        '${proxy.type == 'socks5' ? 'socks5' : 'http'}://${proxy.host}:${proxy.port}';
+    settings = ClientSettings(
+      emulator: Emulation.chrome136,
+      redirectSettings: const RedirectSettings.limited(10),
+      proxySettings: ProxySettings.proxy(proxyUrl),
+    );
+  } else {
+    settings = const ClientSettings(
+      emulator: Emulation.chrome136,
+      redirectSettings: RedirectSettings.limited(10),
+    );
+  }
 
   // Get streaming response
   final streamResponse = await Rhttp.getStream(
-    url, 
-    headers: HttpHeaders.rawMap(cleanedHeaders), 
+    url,
+    headers: HttpHeaders.rawMap(cleanedHeaders),
     settings: settings,
   );
 
-  final isSuccess = streamResponse.statusCode >= 200 && streamResponse.statusCode < 300;
-  if (!isSuccess && streamResponse.statusCode != 206) {  // 206 = Partial Content
+  final isSuccess =
+      streamResponse.statusCode >= 200 && streamResponse.statusCode < 300;
+  if (!isSuccess && streamResponse.statusCode != 206) {
+    // 206 = Partial Content
     throw Exception('Server refused connection: ${streamResponse.statusCode}');
   }
 
@@ -111,7 +134,8 @@ Future<void> downloadChunk(
   }
 
   // Clean headers (skip 'host')
-  final cleanedHeaders = Map<String, String>.from(headers)..removeWhere((k, _) => k.toLowerCase() == 'host');
+  final cleanedHeaders = Map<String, String>.from(headers)
+    ..removeWhere((k, _) => k.toLowerCase() == 'host');
 
   // Add Range header for partial download
   cleanedHeaders['range'] = 'bytes=$start-$end';
@@ -124,13 +148,15 @@ Future<void> downloadChunk(
 
   // Get streaming response
   final streamResponse = await Rhttp.getStream(
-    url, 
-    headers: HttpHeaders.rawMap(cleanedHeaders), 
+    url,
+    headers: HttpHeaders.rawMap(cleanedHeaders),
     settings: settings,
   );
 
-  final isSuccess = streamResponse.statusCode >= 200 && streamResponse.statusCode < 300;
-  if (!isSuccess && streamResponse.statusCode != 206) {  // 206 = Partial Content
+  final isSuccess =
+      streamResponse.statusCode >= 200 && streamResponse.statusCode < 300;
+  if (!isSuccess && streamResponse.statusCode != 206) {
+    // 206 = Partial Content
     throw Exception('Server refused connection: ${streamResponse.statusCode}');
   }
 

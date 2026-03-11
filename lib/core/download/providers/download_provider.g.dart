@@ -350,7 +350,7 @@ final class DownloadListProvider
   DownloadList create() => DownloadList();
 }
 
-String _$downloadListHash() => r'70bc49ada40f56a99954c8d959435acbda88c2ea';
+String _$downloadListHash() => r'7f8cb0c6f1d83d73a3b91335975da5723e8cc202';
 
 abstract class _$DownloadList extends $StreamNotifier<List<DownloadTask>> {
   Stream<List<DownloadTask>> build();

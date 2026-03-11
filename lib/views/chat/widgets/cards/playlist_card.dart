@@ -237,85 +237,88 @@ class _YouTubePlaylistCardState extends ConsumerState<YouTubePlaylistCard> {
                                       ),
 
                                     // Video info and status
-                                    Row(
-                                      children: [
-                                        if (_isM3U8) ...[
-                                          // M3U8 badge
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 6, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: colorScheme.primary
-                                                  .withOpacity(0.15),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              'HLS',
-                                              style: GoogleFonts.montserrat(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: colorScheme.primary,
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Row(
+                                        children: [
+                                          if (_isM3U8) ...[
+                                            // M3U8 badge
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: colorScheme.primary
+                                                    .withOpacity(0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'HLS',
+                                                style: GoogleFonts.montserrat(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: colorScheme.primary,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          // Resolution from variant metadata
-                                          if (_variantMeta?['resolution'] !=
-                                              null) ...[
-                                            Text(
-                                              _variantMeta!['resolution']
-                                                  as String,
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: colorScheme
-                                                      .onSurfaceVariant),
-                                            ),
                                             const SizedBox(width: 6),
-                                          ],
-                                          // FPS
-                                          if (_variantMeta?['frameRate'] !=
-                                              null) ...[
+                                            // Resolution from variant metadata
+                                            if (_variantMeta?['resolution'] !=
+                                                null) ...[
+                                              Text(
+                                                _variantMeta!['resolution']
+                                                    as String,
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: colorScheme
+                                                        .onSurfaceVariant),
+                                              ),
+                                              const SizedBox(width: 6),
+                                            ],
+                                            // FPS
+                                            if (_variantMeta?['frameRate'] !=
+                                                null) ...[
+                                              Text(
+                                                '${(_variantMeta!['frameRate'] as num).toStringAsFixed(0)}fps',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: colorScheme
+                                                        .onSurfaceVariant),
+                                              ),
+                                              const SizedBox(width: 6),
+                                            ],
+                                            // Segment progress
+                                            if (widget.playlist
+                                                        .playlistTotalVideos !=
+                                                    null &&
+                                                widget.playlist
+                                                        .playlistTotalVideos! >
+                                                    0)
+                                              Text(
+                                                '${widget.playlist.playlistCompletedVideos ?? 0}/${widget.playlist.playlistTotalVideos} seg',
+                                                style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: colorScheme
+                                                        .onSurfaceVariant),
+                                              ),
+                                          ] else ...[
+                                            // YT playlist info (original)
+                                            FIcon(RI.RiPlayListLine,
+                                                size: 12,
+                                                color:
+                                                    colorScheme.onSurfaceVariant),
+                                            const SizedBox(width: 4),
                                             Text(
-                                              '${(_variantMeta!['frameRate'] as num).toStringAsFixed(0)}fps',
+                                              l10n.playlist,
                                               style: TextStyle(
                                                   fontSize: 12,
                                                   color: colorScheme
                                                       .onSurfaceVariant),
                                             ),
-                                            const SizedBox(width: 6),
+                                            const SizedBox(width: 8),
                                           ],
-                                          // Segment progress
-                                          if (widget.playlist
-                                                      .playlistTotalVideos !=
-                                                  null &&
-                                              widget.playlist
-                                                      .playlistTotalVideos! >
-                                                  0)
-                                            Text(
-                                              '${widget.playlist.playlistCompletedVideos ?? 0}/${widget.playlist.playlistTotalVideos} seg',
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: colorScheme
-                                                      .onSurfaceVariant),
-                                            ),
-                                        ] else ...[
-                                          // YT playlist info (original)
-                                          FIcon(RI.RiPlayListLine,
-                                              size: 12,
-                                              color:
-                                                  colorScheme.onSurfaceVariant),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            l10n.playlist,
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: colorScheme
-                                                    .onSurfaceVariant),
-                                          ),
-                                          const SizedBox(width: 8),
                                         ],
-                                      ],
+                                      ),
                                     ),
                                     const SizedBox(height: 8),
 

@@ -593,10 +593,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _summaryAnimationsEnabled = true;
   final SettingsService _settingsService = SettingsService();
 
+  // Advanced options state
+  bool _proxyEnabled = false;
+  String _proxyType = 'http';
+  bool _speedGraphEnabled = true;
+  final TextEditingController _speedLimitController = TextEditingController();
+  final TextEditingController _proxyHostController = TextEditingController();
+  final TextEditingController _proxyPortController = TextEditingController();
+  final TextEditingController _proxyUsernameController =
+      TextEditingController();
+  final TextEditingController _proxyPasswordController =
+      TextEditingController();
+  final TextEditingController _userAgentController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    _speedLimitController.dispose();
+    _proxyHostController.dispose();
+    _proxyPortController.dispose();
+    _proxyUsernameController.dispose();
+    _proxyPasswordController.dispose();
+    _userAgentController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSettings() async {
@@ -609,6 +633,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final maxConcurrentGlobal =
         await _settingsService.getMaxConcurrentGlobalDownloads();
     final defaultQuality = await _settingsService.getDefaultQuality();
+
+    // Advanced settings
+    final proxyEnabled = await _settingsService.getProxyEnabled();
+    final proxyType = await _settingsService.getProxyType();
+    final proxyHost = await _settingsService.getProxyHost();
+    final proxyPort = await _settingsService.getProxyPort();
+    final proxyUsername = await _settingsService.getProxyUsername();
+    final proxyPassword = await _settingsService.getProxyPassword();
+    final speedLimitBps = await _settingsService.getGlobalSpeedLimitBps();
+    final customUserAgent = await _settingsService.getCustomUserAgent();
+    final speedGraphEnabled = await _settingsService.getSpeedGraphEnabled();
+
     if (mounted) {
       setState(() {
         _downloadPath = path;
@@ -618,6 +654,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _maxConcurrentGlobalDownloads = maxConcurrentGlobal;
         _summaryAnimationsEnabled = summaryAnimations;
         _defaultQuality = defaultQuality;
+
+        _proxyEnabled = proxyEnabled;
+        _proxyType = proxyType;
+        _speedGraphEnabled = speedGraphEnabled;
+        if (proxyHost.isNotEmpty) _proxyHostController.text = proxyHost;
+        if (proxyPort > 0) _proxyPortController.text = proxyPort.toString();
+        if (proxyUsername.isNotEmpty)
+          _proxyUsernameController.text = proxyUsername;
+        if (proxyPassword.isNotEmpty)
+          _proxyPasswordController.text = proxyPassword;
+        if (speedLimitBps > 0)
+          _speedLimitController.text = (speedLimitBps ~/ 1024).toString();
+        if (customUserAgent != null && customUserAgent.isNotEmpty) {
+          _userAgentController.text = customUserAgent;
+        }
       });
     }
   }
@@ -1173,6 +1224,282 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
               ],
+            ),
+
+            const SizedBox(height: 48),
+
+            SectionHeader(title: l10n.advancedOptions, icon: Icons.build),
+            const SizedBox(height: 8),
+
+            // Speed Limit
+            _StyledLabel(l10n.globalSpeedLimit),
+            _StyledInputContainer(
+              child: TextField(
+                controller: _speedLimitController,
+                decoration: InputDecoration(
+                  hintText: l10n.speedLimitHint,
+                  suffixText: 'KB/s',
+                  border: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                keyboardType: TextInputType.number,
+                style: GoogleFonts.montserrat(fontSize: 13),
+                onChanged: (val) {
+                  final kbps = int.tryParse(val) ?? 0;
+                  _settingsService.setGlobalSpeedLimitBps(kbps * 1024);
+                },
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.speedLimitDescription,
+              style:
+                  TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Proxy Settings
+            _StyledLabel(l10n.proxySettings),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: colorScheme.outlineVariant.withOpacity(0.5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(l10n.enableProxy,
+                          style: GoogleFonts.montserrat(
+                              fontSize: 13, fontWeight: FontWeight.w500)),
+                      Switch(
+                        value: _proxyEnabled,
+                        onChanged: (val) {
+                          setState(() => _proxyEnabled = val);
+                          _settingsService.setProxyEnabled(val);
+                        },
+                      ),
+                    ],
+                  ),
+                  if (_proxyEnabled) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _StyledLabel(l10n.proxyType),
+                              CustomDropdown<String>(
+                                decoration: CustomDropdownDecoration(
+                                    closedFillColor: colorScheme
+                                        .surfaceContainerHighest
+                                        .withOpacity(0.3),
+                                    expandedFillColor: colorScheme.surface,
+                                    closedBorder: Border.all(
+                                        color: colorScheme.outlineVariant
+                                            .withOpacity(0.5)),
+                                    expandedBorder: Border.all(
+                                        color: colorScheme.primary
+                                            .withOpacity(0.15)),
+                                    closedBorderRadius:
+                                        BorderRadius.circular(8),
+                                    expandedBorderRadius:
+                                        BorderRadius.circular(8),
+                                    listItemDecoration: ListItemDecoration(
+                                      splashColor:
+                                          colorScheme.primary.withOpacity(0.05),
+                                      highlightColor:
+                                          colorScheme.primary.withOpacity(0.05),
+                                    )),
+                                items: const ['http', 'socks5'],
+                                initialItem: _proxyType,
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() => _proxyType = val);
+                                    _settingsService.setProxyType(val);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _StyledLabel(l10n.proxyHost),
+                              _StyledInputContainer(
+                                child: TextField(
+                                  controller: _proxyHostController,
+                                  decoration: InputDecoration(
+                                    hintText: '127.0.0.1',
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                  ),
+                                  style: GoogleFonts.montserrat(fontSize: 13),
+                                  onChanged: (val) =>
+                                      _settingsService.setProxyHost(val),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _StyledLabel(l10n.proxyPort),
+                              _StyledInputContainer(
+                                child: TextField(
+                                  controller: _proxyPortController,
+                                  decoration: InputDecoration(
+                                    hintText: '8080',
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  style: GoogleFonts.montserrat(fontSize: 13),
+                                  onChanged: (val) {
+                                    final port = int.tryParse(val) ?? 0;
+                                    _settingsService.setProxyPort(port);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _StyledLabel(l10n.proxyUsername),
+                              _StyledInputContainer(
+                                child: TextField(
+                                  controller: _proxyUsernameController,
+                                  decoration: InputDecoration(
+                                    hintText: l10n.optional,
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                  ),
+                                  style: GoogleFonts.montserrat(fontSize: 13),
+                                  onChanged: (val) =>
+                                      _settingsService.setProxyUsername(val),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _StyledLabel(l10n.proxyPassword),
+                              _StyledInputContainer(
+                                child: TextField(
+                                  controller: _proxyPasswordController,
+                                  obscureText: true,
+                                  decoration: InputDecoration(
+                                    hintText: l10n.optional,
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                  ),
+                                  style: GoogleFonts.montserrat(fontSize: 13),
+                                  onChanged: (val) =>
+                                      _settingsService.setProxyPassword(val),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Custom User-Agent
+            _StyledLabel(l10n.customUserAgent),
+            _StyledInputContainer(
+              child: TextField(
+                controller: _userAgentController,
+                decoration: InputDecoration(
+                  hintText: l10n.userAgentHint,
+                  border: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                style: GoogleFonts.montserrat(fontSize: 13),
+                onChanged: (val) => _settingsService.setCustomUserAgent(val),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.userAgentDescription,
+              style:
+                  TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Speed Graph Toggle
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: colorScheme.outlineVariant.withOpacity(0.5))),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l10n.speedGraph,
+                          style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w500, fontSize: 13)),
+                      const SizedBox(height: 4),
+                      Text(l10n.speedGraphDescription,
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
+                  Switch(
+                    value: _speedGraphEnabled,
+                    onChanged: (val) {
+                      setState(() => _speedGraphEnabled = val);
+                      _settingsService.setSpeedGraphEnabled(val);
+                    },
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 48),
