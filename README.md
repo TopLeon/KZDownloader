@@ -195,8 +195,7 @@ lib/
 
 ## ⚠️ Known Issues
 
-- ~Playlist Cards have problems with neon animated border~
-- ~The playlist detail pane shows "Downloaded" while the playlist is not fully downloaded yet~
+- ~M3u8 Playlists detail pane has some visual bugs and imperfections~
 
 ## 🤝 Contributing
 
