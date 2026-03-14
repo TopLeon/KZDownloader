@@ -34,11 +34,9 @@ The design is modern, minimal, and fully reactive, featuring animated neon/rainb
 
 ### 🎬 Video & Audio Downloads
 - Download videos and audio from **YouTube** and hundreds of other platforms powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
-- Choose **video format** (MP4, MKV) and **quality** before downloading, with two selector modes:
-  - **Simple**: Best · High · Medium · Low
-  - **Expert**: 2160p (4K) · 1440p · 1080p · 720p · 480p
+- Choose **video format** (MP4, MKV) and **quality** before downloading
 - Download entire **YouTube playlists** with configurable concurrency — each video is tracked individually.
-- Audio-only extraction to **MP3, M4A, OGG (Vorbis)**.
+- Audio-only extraction to **MP3, M4A and OGG**.
 
 ### 📁 Generic File Downloader
 - Blazing fast, multi-threaded, **IDM-style chunked download** for any direct HTTP/HTTPS link.
