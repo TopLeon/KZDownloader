@@ -1,7 +1,6 @@
 <div align="center">
-&nbsp;
 <p align="center">
-  <img src="../assets/logo.png" width="50%"/>
+  <img src="../img/logo_out.png" width="50%"/>
   <br>
 </p>
 
@@ -85,8 +84,7 @@ Il design è moderno, minimale e completamente reattivo, con bordi animati a gra
 
 ## 🕹️ Demo
 
-
-https://github.com/user-attachments/assets/72707ddb-4424-479b-a487-96114dd70004
+https://github.com/user-attachments/assets/024d8e8c-fddb-4685-95f1-4b4d1f3212e6
 
 
 
@@ -192,7 +190,6 @@ lib/
 | Funzionalità | Stato |
 |---|---|
 | **Integrazione con il browser** — cattura i download direttamente da Chrome / Firefox tramite un'estensione companion | 🔜 In programma |
-| **Supporto streaming HLS / M3U8** — download e remux di stream video adattivi | 🔜 In programma |
 
 ## 🤝 Contribuire
 

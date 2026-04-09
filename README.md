@@ -1,7 +1,6 @@
 <div align="center">
-&nbsp;
 <p align="center">
-  <img src="assets/logo.png" width="50%"/>
+  <img src="img/logo_out.png" width="60%"/>
   <br>
 </p>
 
@@ -28,17 +27,15 @@
 
 KZDownloader is a cross-platform desktop application built with Flutter that lets you download videos, music, and generic files from hundreds of websites. It integrates a powerful AI assistant that can summarize YouTube video content and answer questions about it. 
 
-The design is modern, minimal, and fully reactive, featuring animated neon/rainbow gradient borders on download cards and interactive elements, smooth transitions, and real-time progress feedback.
+The design is modern, minimal, and fully reactive, featuring animated neon gradient borders on download cards and interactive elements, smooth transitions, and real-time progress feedback.
 
 ## ✨ Features
 
 ### 🎬 Video & Audio Downloads
 - Download videos and audio from **YouTube** and hundreds of other platforms powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
-- Choose **video format** (MP4, MKV) and **quality** before downloading, with two selector modes:
-  - **Simple**: Best · High · Medium · Low
-  - **Expert**: 2160p (4K) · 1440p · 1080p · 720p · 480p
+- Choose **video format** (MP4, MKV) and **quality** before downloading
 - Download entire **YouTube playlists** with configurable concurrency — each video is tracked individually.
-- Audio-only extraction to **MP3, M4A, OGG (Vorbis)**.
+- Audio-only extraction to **MP3, M4A and OGG**.
 
 ### 📁 Generic File Downloader
 - Blazing fast, multi-threaded, **IDM-style chunked download** for any direct HTTP/HTTPS link.
@@ -49,13 +46,13 @@ The design is modern, minimal, and fully reactive, featuring animated neon/rainb
 - Per-chunk progress visualization with active worker count and individual segment progress bars.
 - Built on a Rust-based HTTP backend ([rhttp_plus](https://pub.dev/packages/rhttp_plus)) for maximum throughput and **TLS fingerprinting** to avoid bot-detection on protected servers.
 
-### 🤖 AI — Video Summaries & Chat
+### 🤖 Video Summaries & Chat
 - Automatically fetch the **transcript / description** of a YouTube video and generate a structured summary using an LLM.
 - Ask **follow-up questions** in a persistent chat session tied to the video — Q&A history is saved locally.
 - Support for multiple AI providers:
   - **Ollama** (fully local, no data leaves the machine)
-  - **OpenAI** (GPT-3.5-turbo, GPT-4, GPT-4o, …)
-  - **Google Gemini** (Gemini 2.5 Pro, Flash, …)
+  - **OpenAI** (need API key)
+  - **Google Gemini** (need API key)
 - Streaming text output with animated Markdown rendering.
 - Configurable context size (max characters fed to the LLM).
 
@@ -86,7 +83,7 @@ The design is modern, minimal, and fully reactive, featuring animated neon/rainb
 ## 🕹️ Demo
 
 
-https://github.com/user-attachments/assets/72707ddb-4424-479b-a487-96114dd70004
+https://github.com/user-attachments/assets/024d8e8c-fddb-4685-95f1-4b4d1f3212e6
 
 
 
@@ -195,8 +192,7 @@ lib/
 
 ## ⚠️ Known Issues
 
-- ~Playlist Cards have problems with neon animated border~
-- ~The playlist detail pane shows "Downloaded" while the playlist is not fully downloaded yet~
+- ~M3u8 Playlists detail pane has some visual bugs and imperfections~
 
 ## 🤝 Contributing
 
