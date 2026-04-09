@@ -478,7 +478,7 @@ class IDMDownloader {
 
           final buffer = BytesBuilder(copy: false);
           int bufferStartPos = currentPos;
-          const int batchSize = 2 * 1024 * 1024;
+          const int batchSize = 512 * 1024; // Lower batch size to reduce latency spikes on write isolate
           int localBytes = 0;
 
           final ackPort = ReceivePort();
@@ -486,7 +486,7 @@ class IDMDownloader {
           final ackIterator = StreamIterator(ackPort);
 
           DateTime lastProgressUpdate = DateTime.now();
-          const progressInterval = Duration(milliseconds: 200);
+          const progressInterval = Duration(milliseconds: 50);
 
           // Throttle tracking
           final throttleStopwatch = Stopwatch()..start();
@@ -512,7 +512,7 @@ class IDMDownloader {
               localBytes += data.length;
               throttleBatchBytes += data.length;
 
-              // Speed throttle enforcement
+              // Speed throttle enforcement with token bucket approximation
               if (workerSpeedLimit > 0) {
                 final elapsedSec =
                     throttleStopwatch.elapsedMilliseconds / 1000.0;
@@ -525,15 +525,16 @@ class IDMDownloader {
                     if (delayMs > 0) {
                       await Future.delayed(Duration(milliseconds: delayMs));
                     }
-                    // Reset batch tracking
-                    throttleStopwatch.reset();
-                    throttleBatchBytes = 0;
                   }
                 }
-                // Reset every 2 seconds to avoid drift
-                if (throttleStopwatch.elapsedMilliseconds > 2000) {
+                // Continuous token bucket like window
+                if (throttleStopwatch.elapsedMilliseconds > 1000) {
+                  final deduction = workerSpeedLimit.toInt();
+                  throttleBatchBytes -= deduction;
+                  if (throttleBatchBytes < 0) throttleBatchBytes = 0;
                   throttleStopwatch.reset();
-                  throttleBatchBytes = 0;
+                  // For a precise token bucket we'd just track the elapsed time,
+                  // but this is a simple sufficient approximation.
                 }
               }
 
@@ -823,7 +824,7 @@ class IDMDownloader {
     Map<String, String> headers,
     SendPort writerPort,
   ) {
-    _speed = SpeedTracker(emaAlpha: 0.12);
+    _speed = SpeedTracker(emaAlpha: 0.30);
     _speed.start(initialBytes: _totalDownloaded);
     _sendStatusUpdate();
 
@@ -854,7 +855,8 @@ class IDMDownloader {
       if ((_totalDownloaded - realTotalDownloaded).abs() > driftThreshold) {
         debugPrint(
             'Progress drift detected: $_totalDownloaded vs $realTotalDownloaded, calibrating');
-        _totalDownloaded = realTotalDownloaded;
+        // Graduale correzione per prevenire spike bruschi di velocità
+        _totalDownloaded = ((_totalDownloaded * 3 + realTotalDownloaded) ~/ 4);
       }
 
       // Clamp
@@ -965,8 +967,8 @@ class IDMDownloader {
     final avgRemaining =
         remainingList.fold<int>(0, (s, r) => s + r) / activeWorkers.length;
 
-    const int minSplitThreshold = 5 * 1024 * 1024; // 5 MB
-    final double slowFactor = 1.5;
+    const int minSplitThreshold = 20 * 1024 * 1024; // 20 MB
+    final double slowFactor = 2.0;
 
     for (var w in activeWorkers) {
       if (_workers.length >= _maxTotalSegments) break;

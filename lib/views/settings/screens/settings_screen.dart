@@ -1279,12 +1279,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Text(l10n.enableProxy,
                           style: GoogleFonts.montserrat(
                               fontSize: 13, fontWeight: FontWeight.w500)),
-                      Switch(
-                        value: _proxyEnabled,
-                        onChanged: (val) {
-                          setState(() => _proxyEnabled = val);
-                          _settingsService.setProxyEnabled(val);
-                        },
+                      Transform.scale(
+                        scale: 0.8,
+                        child: Switch(
+                          value: _proxyEnabled,
+                          onChanged: (val) {
+                            setState(() => _proxyEnabled = val);
+                            _settingsService.setProxyEnabled(val);
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -1491,12 +1494,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               color: colorScheme.onSurfaceVariant)),
                     ],
                   ),
-                  Switch(
-                    value: _speedGraphEnabled,
-                    onChanged: (val) {
-                      setState(() => _speedGraphEnabled = val);
-                      _settingsService.setSpeedGraphEnabled(val);
-                    },
+                  Transform.scale(
+                    scale: 0.8,
+                    child: Switch(
+                      value: _speedGraphEnabled,
+                      onChanged: (val) {
+                        setState(() => _speedGraphEnabled = val);
+                        _settingsService.setSpeedGraphEnabled(val);
+                      },
+                    ),
                   ),
                 ],
               ),
